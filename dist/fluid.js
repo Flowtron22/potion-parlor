@@ -63,11 +63,11 @@ class LiquidScene {
    this.stream.scale.set(this.width,this.height,1);this.stream.position.set(this.width/2,this.height/2,80);
    this.targets=Array.from(document.querySelectorAll('.slot'),slot=>{const svg=slot.querySelector('.bottle'),r=(svg||slot).getBoundingClientRect();return{x:r.left+r.width/2-board.left,y:svg?r.top+10*r.height/82-board.top:r.top+9-board.top};});
  }
- material(color){
-   if(!this.materials.has(color)){
+ material(color,available=false){
+   const key=color+':'+available;if(!this.materials.has(key)){
      const material=new THREE.ShaderMaterial({uniforms:{uTint:{value:new THREE.Color(color)}},vertexShader:`varying vec3 vN; void main(){vN=normalize(normalMatrix*normal);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,fragmentShader:`varying vec3 vN;uniform vec3 uTint;void main(){vec3 n=normalize(vN);vec3 l=normalize(vec3(-.5,.7,1.));float diffuse=max(dot(n,l),0.);float spec=pow(max(dot(n,normalize(l+vec3(0.,0.,1.))),0.),55.);float fresnel=pow(1.-abs(n.z),3.);vec3 col=uTint*(.45+.65*diffuse)+vec3(spec*.85)+vec3(.5,.85,.75)*fresnel*.25;gl_FragColor=vec4(col,.96);#include <colorspace_fragment>}`.replace(';#include',';\n#include'),transparent:true});
-     this.materials.set(color,material);
-   }return this.materials.get(color);
+     if(!available)material.uniforms.uTint.value.multiplyScalar(.72);this.materials.set(key,material);
+   }return this.materials.get(key);
  }
  symbolTexture(color,symbol){
    if(!this.textures.has(color)){const c=document.createElement('canvas');c.width=c.height=64;const g=c.getContext('2d');g.font='32px Georgia';g.textAlign='center';g.textBaseline='middle';g.fillStyle='rgba(255,255,255,.8)';g.fillText(symbol,32,34);const texture=new THREE.CanvasTexture(c);this.textures.set(color,texture);}return this.textures.get(color);
@@ -78,7 +78,7 @@ class LiquidScene {
    columns.forEach((column,i)=>column.forEach(d=>{
      live.add(d.id);let group=this.meshes.get(d.id);
      if(!group){group=new THREE.Group();const sphere=new THREE.Mesh(this.geometries[d.shape],this.material(colors[d.color].hex));group.add(sphere);const label=new THREE.Sprite(new THREE.SpriteMaterial({map:this.symbolTexture(colors[d.color].hex,colors[d.color].symbol),transparent:true,depthTest:false}));group.add(label);group.userData.sphere=sphere;this.meshes.set(d.id,group);this.scene.add(group);}
-     group.position.set((d.x??55+i*50)*this.scaleX,this.height-d.y*this.scaleY,15);
+     group.userData.sphere.material=this.material(colors[d.color].hex,!!d.available);group.position.set((d.x??55+i*50)*this.scaleX,this.height-d.y*this.scaleY,15);
      const r=d.drawRadius*this.scaleX,squash=d.impact||0;
      group.userData.sphere.scale.set(r*(1+squash),r*d.aspect*(1-squash)*this.scaleY/this.scaleX,r*.72);
      group.userData.sphere.rotation.z=-(d.angle||0);group.rotation.z=0;group.children[1].scale.set(r*1.25,r*1.25,1);group.children[1].position.z=r*.8+2;

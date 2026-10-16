@@ -1,10 +1,10 @@
 'use strict';
-// The puzzle owns identity/order; this world owns every gem's position and motion.
+// The physics world owns both motion and eligibility: only floor contacts can pour.
 // No Matter bodies are stored in game state, so undo can restore clean JSON snapshots.
 class GemPhysics {
  constructor(){
   this.engine=Matter.Engine.create({enableSleeping:true,positionIterations:8,velocityIterations:6});this.engine.gravity.y=.78;this.bodies=new Map();this.impacts=[];this.accumulator=0;this.lastTime=0;this.drag=null;this.impactClock=0;
-  const wall={isStatic:true,friction:.35,restitution:.12};Matter.Composite.add(this.engine.world,[Matter.Bodies.rectangle(15,130,22,280,wall),Matter.Bodies.rectangle(345,130,22,280,wall),Matter.Bodies.rectangle(180,258,340,26,wall),Matter.Bodies.rectangle(180,3,340,24,wall)]);
+  const wall={isStatic:true,friction:.35,restitution:.12};this.floor=Matter.Bodies.rectangle(180,258,340,26,wall);Matter.Composite.add(this.engine.world,[Matter.Bodies.rectangle(15,130,22,280,wall),Matter.Bodies.rectangle(345,130,22,280,wall),this.floor,Matter.Bodies.rectangle(180,3,340,24,wall)]);this.quietSteps=0;this.settled=false;
   Matter.Events.on(this.engine,'collisionStart',event=>{for(const pair of event.pairs){const a=pair.bodyA,b=pair.bodyB,speed=Math.hypot(a.velocity.x-b.velocity.x,a.velocity.y-b.velocity.y);if(speed<.8)continue;const p=pair.collision.supports[0]||a.position;this.impacts.push({x:p.x,y:p.y,strength:Math.min(3,speed),life:1,color:a.plugin.gem?.color??b.plugin.gem?.color??2});for(const body of [a,b])if(body.plugin.gem)body.plugin.gem.impact=Math.min(.07,speed*.008);}});
  }
  makeBody(d,col){
@@ -14,14 +14,24 @@ class GemPhysics {
   body.plugin.gem=d;Matter.Body.setAngle(body,d.angle??Math.sin(d.seed)*.08);Matter.Body.setVelocity(body,{x:d.vx||0,y:d.vy||0});Matter.Body.setAngularVelocity(body,d.angularVelocity||0);if(d.sleeping)Matter.Sleeping.set(body,true);return body;
  }
  reset(columns){
-  this.release();for(const body of this.bodies.values())Matter.Composite.remove(this.engine.world,body);this.bodies.clear();Matter.Engine.clear(this.engine);this.impacts=[];this.accumulator=0;this.lastTime=0;
+  this.release();for(const body of this.bodies.values())Matter.Composite.remove(this.engine.world,body);this.bodies.clear();Matter.Engine.clear(this.engine);this.impacts=[];this.accumulator=0;this.lastTime=0;this.quietSteps=0;this.settled=false;
   columns.forEach((column,i)=>column.forEach(d=>{const body=this.makeBody(d,i);this.bodies.set(d.id,body);Matter.Composite.add(this.engine.world,body);}));this.sync();
  }
- sync(){for(const body of this.bodies.values()){const d=body.plugin.gem;d.x=body.position.x;d.y=body.position.y;d.angle=body.angle;d.vx=body.velocity.x;d.vy=body.velocity.y;d.angularVelocity=body.angularVelocity;d.sleeping=body.isSleeping;}}
- reconcile(columns){const ids=new Set(columns.flat().map(d=>d.id));for(const [id,body] of this.bodies){if(!ids.has(id)){if(this.drag?.bodyB===body)this.release();Matter.Composite.remove(this.engine.world,body);this.bodies.delete(id);for(const neighbor of this.bodies.values())if(Math.hypot(neighbor.position.x-body.position.x,neighbor.position.y-body.position.y)<65)Matter.Sleeping.set(neighbor,false);}}}
+ sync(){for(const body of this.bodies.values()){const d=body.plugin.gem;d.x=body.position.x;d.y=body.position.y;d.angle=body.angle;d.vx=body.velocity.x;d.vy=body.velocity.y;d.angularVelocity=body.angularVelocity;d.sleeping=body.isSleeping;d.available=this.settled&&this.canCollect(body);}}
+ canCollect(body){return !this.drag&&body.bounds.max.y>=243.8&&Math.abs(body.velocity.y)<.35&&body.speed<.55&&Math.abs(body.angularVelocity)<.04&&!!Matter.Collision.collides(body,this.floor);}
+ bottom(color){return [...this.bodies.values()].filter(b=>(color===undefined||b.plugin.gem.color===color)&&this.canCollect(b)).sort((a,b)=>a.position.x-b.position.x||a.plugin.gem.id-b.plugin.gem.id).map(b=>b.plugin.gem);}
+ advance(){
+  Matter.Engine.update(this.engine,1000/120);
+  const quiet=!this.drag&&[...this.bodies.values()].every(b=>b.isSleeping||(b.speed<.12&&Math.abs(b.angularVelocity)<.012));
+  this.quietSteps=quiet?this.quietSteps+1:0;this.settled=this.quietSteps>=24;
+  if(this.settled)for(const b of this.bodies.values())Matter.Sleeping.set(b,true);
+ }
+ settle(maxSteps=720){for(let i=0;i<maxSteps&&!this.settled;i++)this.advance();this.sync();return this.settled;}
+ remove(id){const body=this.bodies.get(id);if(!body)return;Matter.Composite.remove(this.engine.world,body);this.bodies.delete(id);this.quietSteps=0;this.settled=false;for(const b of this.bodies.values())Matter.Sleeping.set(b,false);this.sync();}
+ reconcile(columns){const ids=new Set(columns.flat().map(d=>d.id));for(const [id,body] of this.bodies)if(!ids.has(id)){if(this.drag?.bodyB===body)this.release();this.remove(id);}}
  step(now,columns){
   this.reconcile(columns);const elapsed=this.lastTime?Math.max(0,Math.min(50,now-this.lastTime)):1000/60;this.lastTime=now;this.accumulator+=elapsed;
-  while(this.accumulator>=1000/120){Matter.Engine.update(this.engine,1000/120);this.accumulator-=1000/120;}
+  while(this.accumulator>=1000/120){this.advance();this.accumulator-=1000/120;}
   this.sync();for(const d of columns.flat())d.impact=(d.impact||0)*Math.exp(-elapsed/120);
   this.impacts=this.impacts.filter(p=>(p.life-=elapsed/500)>0).slice(-20);
  }
@@ -30,6 +40,6 @@ class GemPhysics {
  }
  move(point){if(this.drag)this.drag.pointA={x:Math.max(30,Math.min(330,point.x)),y:Math.max(22,Math.min(238,point.y))};}
  release(){if(this.drag){Matter.Composite.remove(this.engine.world,this.drag);this.drag=null;}}
- nudge(){for(const body of this.bodies.values()){Matter.Sleeping.set(body,false);const direction=body.position.x<180?1:-1,weight=1/Math.sqrt(Math.max(.45,body.mass));Matter.Body.setVelocity(body,{x:body.velocity.x+direction*1.4*weight,y:Math.min(body.velocity.y,0)-2.8*weight});Matter.Body.setAngularVelocity(body,direction*.018*weight);}this.impacts.push({x:180,y:243,strength:2,life:1,color:2});}
+ nudge(){this.quietSteps=0;this.settled=false;for(const body of this.bodies.values()){Matter.Sleeping.set(body,false);const direction=body.position.x<180?1:-1,weight=1/Math.sqrt(Math.max(.45,body.mass));Matter.Body.setVelocity(body,{x:body.velocity.x+direction*1.4*weight,y:Math.min(body.velocity.y,0)-2.8*weight});Matter.Body.setAngularVelocity(body,direction*.018*weight);}this.impacts.push({x:180,y:243,strength:2,life:1,color:2});}
 }
 window.GemPhysics=GemPhysics;

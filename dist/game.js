@@ -5,16 +5,32 @@ let state,history=[],effects=[],busy=false,lastTick=0,time=0,audio,sound=false,m
 const bottleMotion=Array.from({length:5},()=>({angle:0,velocity:0,lift:0}));let motionTime=0;
 let savedLevel=1;try{savedLevel=Math.max(1,Math.min(9999,Number(localStorage.getItem('potion-level'))||1));}catch{}
 const shuffle=(a,rng=Math.random)=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;};
+const levelCache=new Map();
 function random(seed){return()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
 function generate(level,attempt=0){
- const rng=random(9173+level*1231+attempt*7919),bottleCount=10+(level%5),palette=shuffle(Array.from({length:bottleCount},(_,i)=>i%6),rng);
- const batches=palette.map((color,id)=>({color,id,capacity:2+Math.floor(rng()*4),shape:Math.floor(rng()*6)}));
- const total=batches.reduce((n,b)=>n+b.capacity,0),maxRows=Math.ceil(total/6),columns=Array.from({length:6},()=>[]);let id=0;
- batches.forEach(b=>{for(let n=0;n<b.capacity;n++){const available=columns.map((c,i)=>c.length<maxRows?i:-1).filter(i=>i>=0),col=available[attempt<300?Math.floor(rng()*available.length):0];columns[col].push({color:b.color,id:id++,seed:rng()*10,radius:10+rng()*15,aspect:.78+rng()*.48,shape:Math.floor(rng()*6)});}});
- const solution=batches.slice().reverse(),lanes=Array.from({length:4},()=>[]);solution.forEach((b,i)=>lanes[i%4].push({...b}));
- // Reject layouts that cannot be solved with the exact collection policy.
- const check=columns.map(c=>c.map(d=>d.color));for(const b of solution){for(let n=0;n<b.capacity;n++){const col=check.findIndex(c=>c.length&&c[c.length-1]===b.color);if(col<0)return generate(level,attempt+1);check[col].pop();}}
- return{level,columns,lanes,shelf:Array(5).fill(null),brewed:0,moves:0,over:false,solution,total,bottleCount};
+ if(!attempt&&levelCache.has(level))return JSON.parse(levelCache.get(level));
+ const rng=random(9173+level*1231+attempt*7919),total=28+level%5,columns=Array.from({length:7},()=>[]);
+ for(let id=0;id<total;id++){const col=id%7,row=Math.floor(id/7),shape=Math.floor(rng()*6),radius=23+rng()*5;
+  columns[col].push({id,color:Math.floor(rng()*6),shape,radius,drawRadius:radius,aspect:.9+rng()*.2,seed:rng()*10,x:49+col*43.5,y:217-row*43,angle:(rng()-.5)*.2});}
+ const world=new window.GemPhysics();world.reset(columns);world.settle();
+ const initial=JSON.parse(JSON.stringify(columns)),floorCount=world.bottom().length;
+ if(floorCount<6||floorCount>8)return generate(level,attempt+1);
+ const solution=[];
+ // Derive bottles from a real floor-contact removal sequence, then replay it.
+ // The same selector and settling policy are used during play; upper gems cannot bypass them.
+ while(world.bodies.size){
+  const bottom=world.bottom();if(!bottom.length)return generate(level,attempt+1);
+  const counts=COLORS.map((_,color)=>({color,count:bottom.filter(d=>d.color===color).length})).filter(c=>c.count);
+  counts.sort((a,b)=>b.count-a.count||a.color-b.color);
+  const color=counts[0].color,target=2+Math.floor(rng()*4);let capacity=0;
+  for(let i=0;i<target;i++){const d=world.bottom(color)[0];if(!d)break;world.remove(d.id);world.settle();capacity++;}
+  solution.push({id:solution.length,color,capacity,shape:Math.floor(rng()*6)});
+ }
+ const replay=JSON.parse(JSON.stringify(initial));world.reset(replay);world.settle();
+ for(const b of solution)for(let i=0;i<b.capacity;i++){const d=world.bottom(b.color)[0];if(!d)return generate(level,attempt+1);world.remove(d.id);world.settle();}
+ const lanes=Array.from({length:4},()=>[]);solution.forEach((b,i)=>lanes[i%4].push({...b}));
+ const result={level,columns:initial,lanes,shelf:Array(5).fill(null),brewed:0,moves:0,over:false,solution,total,bottleCount:solution.length};
+ levelCache.set(level,JSON.stringify(result));if(levelCache.size>3)levelCache.delete(levelCache.keys().next().value);return result;
 }
 const BOTTLE_PATHS=[
  'M24 10H36V23Q36 26 39 29V65Q39 74 30 74Q21 74 21 65V29Q24 26 24 23Z',
@@ -30,16 +46,16 @@ function bottle(b,fill=65,hidden=false){
 function render(){
  $('level').textContent=String(state.level).padStart(2,'0');$('count').textContent=`${state.brewed} / ${state.bottleCount}`;$('progress').style.width=state.brewed/state.bottleCount*100+'%';$('gems').textContent=state.columns.reduce((n,c)=>n+c.length,0)+effects.length;
  $('rack').innerHTML=state.shelf.map((b,i)=>`<div class="slot" aria-label="${b?COLORS[b.color].name+' bottle, '+b.fill+' of '+b.capacity:'Empty shelf slot '+(i+1)}">${b?bottle(b,8+b.fill/b.capacity*86)+`<span class="fill-label">${b.fill}/${b.capacity}</span>`:''}</div>`).join('');
- $('queues').innerHTML=state.lanes.map((lane,i)=>`<div class="lane">${lane.length?lane.map((b,j)=>`<button ${j||state.over?'disabled':''} class="${j?'':'front'}" data-lane="${i}" aria-label="${j?'Hidden bottle':COLORS[b.color].name+' potion, capacity '+b.capacity+', lane '+(i+1)}">${bottle(b,65,j>0)}${j?'':`<span class="capacity">${b.capacity}</span>`}</button>`).join(''):'<span class="lane-cleared" aria-label="Lane cleared">✧</span>'}</div>`).join('');
+ $('queues').innerHTML=state.lanes.map((lane,i)=>`<div class="lane">${lane.length?lane.slice(0,3).map((b,j)=>`<button ${j||state.over?'disabled':''} class="${j?'':'front'}" data-lane="${i}" aria-label="${j?'Hidden bottle':COLORS[b.color].name+' potion, capacity '+b.capacity+', lane '+(i+1)}">${bottle(b,65,j>0)}${j?'':`<span class="capacity">${b.capacity}</span>`}</button>`).join('')+(lane.length>3?`<span class="queued-more">+${lane.length-3}</span>`:''):'<span class="lane-cleared" aria-label="Lane cleared">✧</span>'}</div>`).join('');
  $('undo').disabled=!history.length||busy;window.potionFluid?.measure();
 }
-function snapshot(){return JSON.stringify({state,effects:effects.map(e=>({...e,start:0}))});}
+function snapshot(){return JSON.stringify({state,effects:effects.map(e=>({...e,start:0})),physics:{settled:physics?.settled||false,quietSteps:physics?.quietSteps||0}});}
 function resetPhysics(){if(state.columns.flat().some(d=>!Number.isFinite(d.drawRadius)||!Number.isFinite(d.y)))layoutGems(state.columns);if(window.GemPhysics){physics??=new window.GemPhysics();physics.reset(state.columns);}for(const m of bottleMotion){m.angle=0;m.velocity=0;m.lift=0;}}
 function newGame(level=1){window.potionFluid?.reset();state=generate(level);history=[];effects=[];busy=false;lastTick=performance.now();resetPhysics();$('modal').classList.add('hidden');render();}
 function choose(lane){if(state.over||!state.lanes[lane]?.length)return;const slot=state.shelf.indexOf(null);if(slot<0)return;history.push(snapshot());const b=state.lanes[lane].shift();state.shelf[slot]={...b,fill:0};state.moves++;bottleMotion[slot].velocity=(b.shape%2?1:-1)*.85;bottleMotion[slot].lift=-7;tone(330+b.color*40,.06);render();}
 function tick(now){
- if(state.over||effects.length||now-lastTick<240)return;lastTick=now;
- for(let i=0;i<5;i++){const b=state.shelf[i];if(!b)continue;const col=state.columns.findIndex(c=>c.length&&c[c.length-1].color===b.color);if(col<0)continue;const drop=state.columns[col].pop();busy=true;$('undo').disabled=true;
+ if(state.over||effects.length||now-lastTick<240||!physics?.settled)return;lastTick=now;
+ for(let i=0;i<5;i++){const b=state.shelf[i];if(!b)continue;const drop=physics.bottom(b.color)[0];if(!drop)continue;const col=state.columns.findIndex(c=>c.some(d=>d.id===drop.id));state.columns[col]=state.columns[col].filter(d=>d.id!==drop.id);physics.remove(drop.id);busy=true;$('undo').disabled=true;
   effects.push({color:drop.color,radius:drop.drawRadius||drop.radius,from:{x:drop.x??55+col*50,y:drop.y||220},to:{x:36+i*72,y:298},start:now,duration:850,slot:i});tone(460+drop.color*70,.04);return;}
  busy=false;$('undo').disabled=!history.length;
  if(state.brewed===state.bottleCount){state.over=true;try{localStorage.setItem('potion-level',String(state.level+1));}catch{}render();showEnd(true);}else if(state.shelf.every(Boolean)){state.over=true;render();showEnd(false);}
@@ -51,7 +67,7 @@ function layoutGems(columns){columns.forEach(column=>{const raw=column.reduce((n
 function orb(x,y,d){
  const c=COLORS[d.color],r=d.drawRadius;ctx.save();ctx.translate(x,y);ctx.rotate(d.angle||0);ctx.scale(1,d.aspect);ctx.beginPath();
  if(d.shape===0||d.shape===4)ctx.ellipse(0,0,r*(d.shape===4?.74:1),r,0,0,Math.PI*2);else{const n=[0,4,6,5,0,3][d.shape];for(let i=0;i<=n;i++){const a=i/n*Math.PI*2-Math.PI/2,px=Math.cos(a)*r,py=Math.sin(a)*r;i?ctx.lineTo(px,py):ctx.moveTo(px,py);}ctx.closePath();}
- const g=ctx.createRadialGradient(-r*.3,-r*.4,0,0,0,r);g.addColorStop(0,'#fff');g.addColorStop(.2,c.hex);g.addColorStop(1,c.hex+'99');ctx.fillStyle=g;ctx.fill();ctx.strokeStyle='#ffffff55';ctx.stroke();ctx.fillStyle='#ffffffaa';ctx.font=Math.max(7,r*.65)+'px Georgia';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(c.symbol,0,1);ctx.restore();
+ const g=ctx.createRadialGradient(-r*.3,-r*.4,0,0,0,r);g.addColorStop(0,'#fff');g.addColorStop(.2,c.hex);g.addColorStop(1,c.hex+'99');ctx.fillStyle=g;ctx.globalAlpha=d.available?1:.72;ctx.fill();ctx.strokeStyle=d.available?'#ffffffbb':'#ffffff33';ctx.stroke();ctx.fillStyle='#ffffffaa';ctx.font=Math.max(7,r*.65)+'px Georgia';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(c.symbol,0,1);ctx.restore();
 }
 function draw(now){
  time=now/1000;ctx.clearRect(0,0,360,290);ctx.save();ctx.shadowColor='#061a16';ctx.shadowBlur=15;ctx.shadowOffsetY=9;roundRect(22,12,316,241,24);ctx.fillStyle='#142e27';ctx.fill();ctx.restore();const glass=ctx.createLinearGradient(24,0,336,0);glass.addColorStop(0,'#9bb69c44');glass.addColorStop(.08,'#adc9ac10');glass.addColorStop(.85,'#d7e3c608');glass.addColorStop(1,'#accbaf33');roundRect(22,12,316,241,24);ctx.fillStyle=glass;ctx.fill();ctx.lineWidth=1.5;ctx.strokeStyle='#9bb99c66';ctx.stroke();
@@ -63,11 +79,9 @@ function draw(now){
  window.potionFluid?.update(now,state.columns,effects,COLORS);for(const e of completed){effects.splice(effects.indexOf(e),1);completePour(e);}if($('modal').classList.contains('hidden'))tick(now);requestAnimationFrame(draw);
 }
 function showEnd(won){modalMode=won?'win':'lose';$('modalTitle').textContent=won?'✧':'↻';$('modalTitle').setAttribute('aria-label',won?'Level completed':'Shelf blocked');$('modalAction').textContent=won?'→':'↶';$('modalAction').setAttribute('aria-label',won?'Next level':'Undo last bottle');$('modal').classList.remove('hidden');$('modalAction').focus();}
-function undo(){if(!history.length)return;window.potionFluid?.reset();const saved=JSON.parse(history.pop());state=saved.state;state.over=false;effects=saved.effects.map(e=>({...e,start:performance.now()}));busy=!!effects.length;lastTick=performance.now();resetPhysics();$('modal').classList.add('hidden');render();}
+function undo(){if(!history.length)return;window.potionFluid?.reset();const saved=JSON.parse(history.pop());state=saved.state;state.over=false;effects=saved.effects.map(e=>({...e,start:performance.now()}));busy=!!effects.length;lastTick=performance.now();resetPhysics();if(physics&&saved.physics){physics.settled=saved.physics.settled;physics.quietSteps=saved.physics.quietSteps;physics.sync();}$('modal').classList.add('hidden');render();}
 $('queues').addEventListener('click',e=>{const b=e.target.closest('button[data-lane]');if(b&&!b.disabled)choose(Number(b.dataset.lane));});$('restart').onclick=()=>newGame(state.level);$('undo').onclick=undo;$('sound').onclick=()=>{sound=!sound;$('sound').textContent=sound?'♫':'♪';$('sound').setAttribute('aria-label',sound?'Mute sound':'Enable sound');tone(660,.1);};$('modalAction').onclick=()=>{if(modalMode==='win')newGame(state.level+1);else undo();};
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='z'){e.preventDefault();undo();}if(e.key==='Tab'&&!$('modal').classList.contains('hidden')){e.preventDefault();$('modalAction').focus();}});
-function pointerPoint(e){const r=canvas.getBoundingClientRect();return{x:(e.clientX-r.left)*360/r.width,y:(e.clientY-r.top)*290/r.height};}
-canvas.addEventListener('pointerdown',e=>{if(!physics||state.over)return;const point=pointerPoint(e);if(physics.grab(point)){history.push(snapshot());canvas.setPointerCapture(e.pointerId);canvas.classList.add('dragging');$('undo').disabled=false;}});
-canvas.addEventListener('pointermove',e=>physics?.move(pointerPoint(e)));function releaseGem(){physics?.release();canvas.classList.remove('dragging');}canvas.addEventListener('pointerup',releaseGem);canvas.addEventListener('pointercancel',releaseGem);canvas.addEventListener('lostpointercapture',releaseGem);
+// Challenge mode has no gem-drag control: buried colors must fall naturally.
 $('shake').onclick=()=>{if(!physics||state.over)return;history.push(snapshot());physics.nudge();$('undo').disabled=false;document.querySelector('.game').animate([{transform:'rotate(0)'},{transform:'rotate(-.45deg)'},{transform:'rotate(.4deg)'},{transform:'rotate(0)'}],{duration:360,easing:'ease-out'});tone(220,.08);};
 function resize(){const dpr=Math.min(devicePixelRatio||1,2);canvas.width=360*dpr;canvas.height=290*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);}window.addEventListener('resize',resize);resize();newGame(savedLevel);requestAnimationFrame(draw);
