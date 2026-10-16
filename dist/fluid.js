@@ -45,7 +45,9 @@ class LiquidScene {
    this.scene.add(new THREE.AmbientLight(0xd7f7e9,2));
    const key=new THREE.DirectionalLight(0xffffff,3.5);key.position.set(-100,-150,500);this.scene.add(key);
    const rim=new THREE.DirectionalLight(0xa9e6dd,2);rim.position.set(300,80,200);this.scene.add(rim);
-   this.geometry=new THREE.SphereGeometry(1,24,18);this.meshes=new Map();this.materials=new Map();this.textures=new Map();this.splashes=[];this.seen=new WeakSet();this.available=true;
+   const tear=new THREE.SphereGeometry(1,20,16),vertices=tear.attributes.position;for(let i=0;i<vertices.count;i++){const y=vertices.getY(i),t=.76-.24*y;vertices.setX(i,vertices.getX(i)*t);vertices.setZ(i,vertices.getZ(i)*t);}tear.computeVertexNormals();
+   const hex=new THREE.CylinderGeometry(1,1,1.05,6,1);hex.rotateX(Math.PI/2);
+   this.geometries=[new THREE.SphereGeometry(1,20,16),new THREE.OctahedronGeometry(1),hex,new THREE.DodecahedronGeometry(1),tear,new THREE.TetrahedronGeometry(1)];this.meshes=new Map();this.materials=new Map();this.textures=new Map();this.splashes=[];this.seen=new WeakSet();this.available=true;
    this.uniforms={uSize:{value:new THREE.Vector2()},uTime:{value:0},uColor:{value:new THREE.Color()},uDrops:{value:Array.from({length:48},()=>new THREE.Vector4(-9999,-9999,0,0))}};
    this.streamGeometry=new THREE.PlaneGeometry(1,1);this.streamMaterial=new THREE.ShaderMaterial({uniforms:this.uniforms,vertexShader:vertex,fragmentShader:fragment,transparent:true,depthWrite:false,extensions:{derivatives:true}});
    this.stream=new THREE.Mesh(this.streamGeometry,this.streamMaterial);this.stream.position.z=80;this.stream.frustumCulled=false;this.scene.add(this.stream);
@@ -59,7 +61,7 @@ class LiquidScene {
    this.root.style.left=(board.left-parent.left-1)+'px';this.root.style.top=(board.top-parent.top-1)+'px';this.root.style.width=this.width+'px';this.root.style.height=this.height+'px';
    this.renderer.setSize(this.width,this.height);this.camera.right=this.width;this.camera.top=this.height;this.camera.bottom=0;this.camera.updateProjectionMatrix();this.uniforms.uSize.value.set(this.width,this.height);
    this.stream.scale.set(this.width,this.height,1);this.stream.position.set(this.width/2,this.height/2,80);
-   this.targets=Array.from(document.querySelectorAll('.slot'),slot=>{const r=slot.getBoundingClientRect();return{x:r.left+r.width/2-board.left,y:r.top+9-board.top};});
+   this.targets=Array.from(document.querySelectorAll('.slot'),slot=>{const svg=slot.querySelector('.bottle'),r=(svg||slot).getBoundingClientRect();return{x:r.left+r.width/2-board.left,y:svg?r.top+10*r.height/82-board.top:r.top+9-board.top};});
  }
  material(color){
    if(!this.materials.has(color)){
@@ -75,11 +77,11 @@ class LiquidScene {
    const t=now/1000,live=new Set();
    columns.forEach((column,i)=>column.forEach(d=>{
      live.add(d.id);let group=this.meshes.get(d.id);
-     if(!group){group=new THREE.Group();const sphere=new THREE.Mesh(this.geometry,this.material(colors[d.color].hex));group.add(sphere);const label=new THREE.Sprite(new THREE.SpriteMaterial({map:this.symbolTexture(colors[d.color].hex,colors[d.color].symbol),transparent:true,depthTest:false}));label.scale.set(18,18,1);label.position.z=24;group.add(label);group.userData.sphere=sphere;this.meshes.set(d.id,group);this.scene.add(group);}
+     if(!group){group=new THREE.Group();const sphere=new THREE.Mesh(this.geometries[d.shape],this.material(colors[d.color].hex));group.add(sphere);const label=new THREE.Sprite(new THREE.SpriteMaterial({map:this.symbolTexture(colors[d.color].hex,colors[d.color].symbol),transparent:true,depthTest:false}));group.add(label);group.userData.sphere=sphere;this.meshes.set(d.id,group);this.scene.add(group);}
      group.position.set((55+i*50)*this.scaleX,this.height-d.y*this.scaleY,15);
-     const r=(21+Math.sin(d.seed)*2)*this.scaleX,wobble=Math.sin(t*2.4+d.seed)*.035;
-     group.userData.sphere.scale.set(r*(1+wobble),r*(1-wobble)*this.scaleY/this.scaleX,r*.72);
-     group.rotation.z=Math.sin(t*1.4+d.seed)*.035;group.children[1].scale.set(28*this.scaleX,28*this.scaleX,1);
+     const r=d.drawRadius*this.scaleX,wobble=Math.sin(t*2.4+d.seed)*.018;
+     group.userData.sphere.scale.set(r*(1+wobble),r*d.aspect*(1-wobble)*this.scaleY/this.scaleX,r*.72);
+     group.rotation.z=Math.sin(d.seed)*.12+Math.sin(t*1.4+d.seed)*.018;group.children[1].scale.set(r*1.25,r*1.25,1);group.children[1].position.z=r*.8+2;
    }));
    for(const [id,group] of this.meshes){if(!live.has(id)){this.scene.remove(group);group.children[1].material.dispose();this.meshes.delete(id);}}
    const drops=this.uniforms.uDrops.value;drops.forEach(d=>d.set(-9999,-9999,0,0));let k=0;
@@ -88,26 +90,26 @@ class LiquidScene {
      const source={x:e.from.x*this.scaleX,y:e.from.y*this.scaleY},color=colors[e.color].hex;
      this.uniforms.uColor.value.set(color);
      // The source stretches into a neck, then becomes a continuous wavy jet.
-     if(p<.3)drops[k++].set(source.x,source.y,18*this.scaleX*(1-p/.3),0);
+     if(p<.3)drops[k++].set(source.x,source.y,Math.min(6,e.radius*.35)*this.scaleX*(1-p/.3),0);
      const end=Math.min(1,p/.32),start=Math.max(0,(p-.68)/.32);
      for(let j=0;j<32;j++){
        const q=start+(end-start)*j/31,inv=1-q;
-       const x=inv*inv*source.x+2*inv*q*target.x+q*q*target.x+Math.sin(q*21-t*13)*2.2*Math.sin(q*Math.PI);
+       const x=inv*inv*source.x+2*inv*q*target.x+q*q*target.x+Math.sin(q*21-t*13)*.65*Math.sin(q*Math.PI);
        const y=source.y+(target.y-source.y)*q;
-       const radius=(4.8+Math.sin(q*15-t*12)*.25)*(1-q*.22)*this.scaleX;
+       const radius=(1.8+Math.sin(q*15-t*12)*.08)*(1-q*.18)*Math.sqrt(Math.max(.04,end-start))*this.scaleX;
        drops[k++].set(x,y,radius,0);
      }
      if(p>.32){
        const splash=(p-.32)/.68;
-       for(let j=0;j<9;j++){const age=(splash+j/9)%1,v=(j-4)*22;drops[k++].set(target.x+v*age,target.y-38*age+45*age*age,(1-age)*2.8*this.scaleX,0);}
-       drops[k++].set(target.x,target.y,5.5*this.scaleX,0);
+       for(let j=0;j<9;j++){const age=(splash+j/9)%1,v=(j-4)*9;drops[k++].set(target.x+v*age,target.y-18*age+22*age*age,(1-age)*1.2*this.scaleX,0);}
+       drops[k++].set(target.x,target.y,1.8*this.scaleX,0);
        const slot=document.querySelectorAll('.slot')[e.slot];if(slot){slot.style.setProperty('--impact',String(Math.sin(t*32)*3));slot.classList.add('pouring');}
      }
      if(!this.seen.has(e)){this.seen.add(e);this.splashes.push({target,start:e.start+e.duration*.85,color,slot:e.slot});}
    }
    this.splashes=this.splashes.filter(s=>now-s.start<500);
    if(!effects.length){document.querySelectorAll('.slot.pouring').forEach(s=>{s.classList.remove('pouring');s.style.removeProperty('--impact');});}
-   if(!effects.length&&this.splashes.length){const s=this.splashes[this.splashes.length-1],age=Math.max(0,(now-s.start)/500);this.uniforms.uColor.value.set(s.color);for(let j=0;j<9;j++){drops[k++].set(s.target.x+(j-4)*16*age,s.target.y-32*age+40*age*age,Math.max(0,(1-age)*2.2),0);}}
+   if(!effects.length&&this.splashes.length){const s=this.splashes[this.splashes.length-1],age=Math.max(0,(now-s.start)/500);this.uniforms.uColor.value.set(s.color);for(let j=0;j<9;j++){drops[k++].set(s.target.x+(j-4)*7*age,s.target.y-16*age+20*age*age,Math.max(0,(1-age)*1.1),0);}}
    this.uniforms.uTime.value=t;this.renderer.render(this.scene,this.camera);
  }
  reset(){this.splashes=[];this.seen=new WeakSet();for(const group of this.meshes.values()){this.scene.remove(group);group.children[1].material.dispose();}this.meshes.clear();}
