@@ -21,7 +21,7 @@ export async function submit(request:Request){
  const run=await env.DB!.prepare('SELECT * FROM runs WHERE id=? AND player=?').bind(String(data.ticket),id).first<{id:string;player:string;level:number;created:number;used:number}>();
  if(!run||Date.now()-run.created>86400000)return json({error:'Run expired. Restart to rank a new run.'},400);
  if(run.used)return json({error:'This run was already submitted.'},409);
- let result;try{result=validateRun(levels[run.level-1],data.events);}catch{return json({error:'This run could not be verified. Try a fresh run.'},400);}
+ let result;try{result=validateRun(levels[run.level-1],data.events);}catch(error){console.warn('Run validation:',error);return json({error:'This run could not be verified. Try a fresh run.'},400);}
  // Conditional insert makes ticket consumption atomic even with concurrent submissions.
  await env.DB!.batch([
   env.DB!.prepare('INSERT OR IGNORE INTO scores(run,player,name,level,score,combo,created) SELECT id,player,?,level,?,?,? FROM runs WHERE id=? AND used=0').bind(name,result.score,result.best,Date.now(),run.id),

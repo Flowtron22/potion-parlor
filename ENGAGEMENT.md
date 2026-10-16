@@ -11,7 +11,7 @@ The previous queues used round-robin assignment from the winning route. That exp
 | 9–12 | 6 | 4 | More competing colors |
 | 13–30 | 6 | 3 | Commit carefully; reserve a useful slot |
 
-Gem silhouettes, masses, sizes, arrangement and bottle capacities continue varying. Each initial pile exposes 6–8 floor gems. Only real floor contact unlocks conversion. Thirty deterministic boards allow comparable per-level rankings and repeated score improvement.
+Gem silhouettes, masses, sizes, arrangement and bottle capacities continue varying. Each initial pile exposes 6–8 floor gems. Only real floor contact unlocks conversion. Thirty prepared boards allow comparable per-level rankings and repeated score improvement. Browsers fetch the canonical board rather than regenerate it: physics generation can diverge between JavaScript runtimes. Build preparation copies the same reference data into the public board files and wraps the shared physics/scoring sources for server use.
 
 ## Combos and points
 

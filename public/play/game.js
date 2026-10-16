@@ -9,17 +9,15 @@ let savedLevel=1;try{savedLevel=Math.max(1,Math.min(30,Number(localStorage.getIt
 const shuffle=(a,rng=Math.random)=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;};
 const levelCache=new Map();
 let levelWorker=null,loadId=0;
-function loadLevel(level){
- if(levelCache.has(level)){newGame(level,JSON.parse(levelCache.get(level)));return;}
- if(typeof Worker!=='function'){newGame(level);return;}
- document.documentElement.classList.add('loading');document.querySelector('.app').setAttribute('aria-busy','true');$('restart').disabled=true;$('shake').disabled=true;
+async function loadLevel(level){
  const id=++loadId;
- const fallback=()=>{levelWorker?.terminate();levelWorker=null;document.documentElement.classList.remove('loading');document.querySelector('.app').setAttribute('aria-busy','false');setTimeout(()=>newGame(level),0);};
+ if(levelCache.has(level)){document.documentElement.classList.remove('loading');document.querySelector('.app').setAttribute('aria-busy','false');newGame(level,JSON.parse(levelCache.get(level)));return;}
+ document.documentElement.classList.add('loading');document.querySelector('.app').setAttribute('aria-busy','true');$('restart').disabled=true;$('shake').disabled=true;
  try{
-  if(!levelWorker)levelWorker=new Worker('level-worker.js');
-  levelWorker.onmessage=event=>{if(event.data.id!==loadId)return;if(event.data.error){fallback();return;}const data=event.data.data;levelCache.set(level,JSON.stringify(data));if(levelCache.size>3)levelCache.delete(levelCache.keys().next().value);document.documentElement.classList.remove('loading');document.querySelector('.app').setAttribute('aria-busy','false');newGame(level,data);};
-  levelWorker.onerror=fallback;levelWorker.postMessage({id,level});
- }catch{fallback();}
+  const response=await fetch('boards/'+level+'.json');if(!response.ok)throw Error('Board unavailable');const data=await response.json();if(id!==loadId)return;
+  levelCache.set(level,JSON.stringify(data));if(levelCache.size>3)levelCache.delete(levelCache.keys().next().value);newGame(level,data);
+ }catch{if(id!==loadId)return;rankConnection='Offline';$('rankMode').textContent='Tap ↻ to retry';$('restart').disabled=false;$('restart').onclick=()=>loadLevel(level);}
+ finally{if(id===loadId){document.documentElement.classList.remove('loading');document.querySelector('.app').setAttribute('aria-busy','false');}}
 }
 function random(seed){return()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
 function generate(level){return window.PotionLevels.generate(level);}
@@ -56,7 +54,7 @@ function newGame(level=1,prepared){
  window.potionFluid?.reset();state=prepared||generate(level);state.scoring=PotionScore.fresh();
  runLog=[];ranked=true;runTicket=null;rankConnection='Connecting';const serial=++runSerial;
  window.PotionOnline?.start(level).then(ticket=>{if(serial!==runSerial)return;runTicket=ticket;rankConnection=ticket?'Ranked':'Offline';render();});
- history=[];effects=[];busy=false;lastTick=performance.now();resetPhysics();$('modal').classList.add('hidden');render();
+ history=[];effects=[];busy=false;lastTick=performance.now();resetPhysics();$('modal').classList.add('hidden');$('restart').onclick=()=>loadLevel(state.level);render();
 }
 function choose(lane){if(state.over||!state.lanes[lane]?.length)return;const slot=state.shelf.indexOf(null);if(slot<0)return;history.push(snapshot());const b=state.lanes[lane].shift();state.shelf[slot]={...b,fill:0};state.moves++;runLog.push({type:"place",lane});PotionScore.place(state.scoring);bottleMotion[slot].velocity=(b.shape%2?1:-1)*.85;bottleMotion[slot].lift=-7;tone(330+b.color*40,.06);render();}
 function tick(now){
@@ -100,5 +98,5 @@ function flashScore(text){const el=$('scoreFlash');if(!el)return;el.textContent=
 if($('leaderboard')?.addEventListener&&window.PotionOnline){$('leaderboard').onclick=()=>window.PotionOnline.open(state?.level||1);$('postScore').onclick=async()=>{const btn=$('postScore');btn.disabled=true;$('submitStatus').textContent='Submitting…';try{if(!runTicket)throw Error('Reconnect and replay to rank this run.');const result=await window.PotionOnline.submit(runTicket,$('playerName').value,runLog);$('submitStatus').textContent='Saved · #'+result.rank;btn.textContent='Submitted';}catch(e){$('submitStatus').textContent=e.message;btn.disabled=false;}};}
 
 document.addEventListener('potion-level',event=>loadLevel(event.detail));
-function resize(){const dpr=Math.min(devicePixelRatio||1,2);canvas.width=360*dpr;canvas.height=290*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);viewDirty=true;if(window.potionFluid)window.potionFluid.needsMeasure=true;}window.addEventListener('resize',resize);resize();if(typeof Worker==='function'&&location.protocol!=='file:')loadLevel(savedLevel);else newGame(savedLevel);requestAnimationFrame(draw);
+function resize(){const dpr=Math.min(devicePixelRatio||1,2);canvas.width=360*dpr;canvas.height=290*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);viewDirty=true;if(window.potionFluid)window.potionFluid.needsMeasure=true;}window.addEventListener('resize',resize);resize();if(typeof fetch==='function'&&typeof location!=='undefined')loadLevel(savedLevel);else newGame(savedLevel);requestAnimationFrame(draw);
 

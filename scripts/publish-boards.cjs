@@ -1,0 +1,1 @@
+const fs=require('fs');fs.mkdirSync('public/play/boards',{recursive:true});for(const board of JSON.parse(fs.readFileSync('server/levels.json','utf8'))){const {solution,...publicBoard}=board;fs.writeFileSync('public/play/boards/'+board.level+'.json',JSON.stringify(publicBoard));}
