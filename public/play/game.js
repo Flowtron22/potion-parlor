@@ -2,10 +2,10 @@
 const COLORS=[{name:'Rose',hex:'#f17b91',symbol:'♡'},{name:'Amber',hex:'#efb74e',symbol:'☀'},{name:'Mint',hex:'#7dcfa4',symbol:'✿'},{name:'Azure',hex:'#69c4e5',symbol:'☾'},{name:'Lilac',hex:'#b89ae6',symbol:'✧'},{name:'Peach',hex:'#ef9f72',symbol:'◇'}];
 const $=id=>document.getElementById(id),canvas=$('game'),ctx=canvas.getContext('2d');
 let runLog=[],ranked=true,runTicket=null,runSerial=0,rankConnection='Connecting';
-let state,history=[],effects=[],busy=false,lastTick=0,time=0,audio,sound=false,modalMode='win',bottleSerial=0,physics=null;
+let state,history=[],effects=[],busy=false,lastTick=0,nextDrawAt=0,time=0,audio,sound=false,modalMode='win',bottleSerial=0,physics=null;
 const bottleMotion=Array.from({length:5},()=>({angle:0,velocity:0,lift:0}));let motionTime=0;
 let slotNodes=[],slotSVGs=[],laneNodes=[],viewDirty=true;const rackMeta=Array(5).fill(null),queueMeta=Array(4).fill(null);
-let savedLevel=1;try{savedLevel=Math.max(1,Math.min(30,Number(localStorage.getItem('potion-level'))||1));}catch{}
+let savedLevel=1;try{savedLevel=Math.max(1,Math.min(30,Number(localStorage.getItem('potion-blocked-level'))||1));}catch{}
 const shuffle=(a,rng=Math.random)=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;};
 const levelCache=new Map();
 let levelWorker=null,loadId=0;
@@ -34,18 +34,18 @@ function bottle(b,fill=65,hidden=false){
  return `<svg class="bottle shape-${b.shape}" viewBox="0 0 60 82" preserveAspectRatio="none" aria-hidden="true" style="--potion:${c.hex};--bw:${w}px;--bh:${h}px"><defs><clipPath id="${clip}"><path d="${path}"/></clipPath><linearGradient id="${clip}-shine"><stop stop-color="#fff" stop-opacity=".3"/><stop offset=".3" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#fff" stop-opacity=".12"/></linearGradient></defs><path d="${path}" fill="#bbebdc0b"/>${hidden?'':`<g clip-path="url(#${clip})" class="potion-fill"><rect x="4" y="${y}" width="52" height="80" fill="${c.hex}" fill-opacity=".85"/><path class="meniscus" d="M0 ${y} Q15 ${y-3} 30 ${y} T60 ${y}V${y+7}H0Z" fill="${c.hex}"/><circle class="bubble" cx="29" cy="65" r="1.3" fill="#ffffff88"/></g>`}<path d="${path}" fill="url(#${clip}-shine)" stroke="#d0f0ddaa" stroke-width="1.5"/><path d="M26 15V25M18 44V59" fill="none" stroke="#ffffff66" stroke-width="2.3" stroke-linecap="round"/><rect class="cork" x="22" y="3" width="16" height="8" rx="2" fill="#c5a36b"/><path class="cork" d="M24 4H36" stroke="#eed399"/><text x="30" y="56" text-anchor="middle" fill="${hidden?'#8da897':'#fff'}" font-size="${hidden?19:15}" font-family="Georgia">${hidden?'?':c.symbol}</text></svg>`;
 }
 function render(){
- if($('score')){$('score').textContent=(state.scoring?.score||0).toLocaleString();$('combo').textContent='×'+(state.scoring?.combo||1);$('rankMode').textContent=ranked?rankConnection:'Practice';}$('level').textContent=String(state.level).padStart(2,'0');$('count').textContent=`${state.brewed} / ${state.bottleCount}`;$('progress').style.width=state.brewed/state.bottleCount*100+'%';$('gems').textContent=state.columns.reduce((n,c)=>n+c.length,0)+effects.length;
+ if($('score')){$('score').textContent=(state.scoring?.score||0).toLocaleString();$('combo').textContent=state.scoring?.combo>1?'COMBO ×'+state.scoring.combo:'×1';$('combo').classList.toggle('combo-live',state.scoring?.combo>1);$('rankMode').textContent=ranked?rankConnection:'Practice';}$('level').textContent=String(state.level).padStart(2,'0');$('count').textContent=`${state.brewed} / ${state.bottleCount}`;$('progress').style.width=state.brewed/state.bottleCount*100+'%';$('gems').textContent=state.columns.reduce((n,c)=>n+c.length,0)+effects.length;
  $('undo').disabled=!history.length||busy;$('restart').disabled=false;$('shake').disabled=false;viewDirty=true;
  if(!$('rack').children)return;
  let structural=false;
- if(!slotNodes.length){$('rack').innerHTML=Array(5).fill('<div class="slot"></div>').join('');slotNodes=Array.from($('rack').children);$('queues').innerHTML=Array(4).fill('<div class="lane"></div>').join('');laneNodes=Array.from($('queues').children);structural=true;}
+ if(!slotNodes.length){$('rack').innerHTML=Array(5).fill('<div class="slot"></div>').join('');slotNodes=Array.from($('rack').children);structural=true;}
  for(let i=0;i<5;i++){slotNodes[i].classList.toggle('locked',i>=state.shelf.length);slotNodes[i].setAttribute('aria-label',i>=state.shelf.length?'Locked shelf slot':'Empty shelf slot');if(i>=state.shelf.length){slotNodes[i].innerHTML='';slotSVGs[i]=null;rackMeta[i]=null;}}
  state.shelf.forEach((b,i)=>{const slot=slotNodes[i],key=b?state.level+':'+b.id:'empty';
   if(rackMeta[i]?.key!==key){slot.innerHTML=b?bottle(b,8+b.fill/b.capacity*86)+`<span class="fill-label">${b.fill}/${b.capacity}</span>`:'';slotSVGs[i]=slot.querySelector('.bottle');rackMeta[i]={key,fill:b?.fill};structural=true;}
   else if(b&&rackMeta[i].fill!==b.fill){const y=75-(8+b.fill/b.capacity*86)*.54;slot.querySelector('.potion-fill rect').setAttribute('y',y);slot.querySelector('.meniscus').setAttribute('d',`M0 ${y} Q15 ${y-3} 30 ${y} T60 ${y}V${y+7}H0Z`);slot.querySelector('.fill-label').textContent=`${b.fill}/${b.capacity}`;rackMeta[i].fill=b.fill;}
   slot.setAttribute('aria-label',b?COLORS[b.color].name+' bottle, '+b.fill+' of '+b.capacity:'Empty shelf slot '+(i+1));
  });
- state.lanes.forEach((lane,i)=>{const signature=state.level+':'+lane.map(b=>b.id).join(',')+':'+state.over;if(queueMeta[i]===signature)return;queueMeta[i]=signature;laneNodes[i].innerHTML=lane.length?lane.slice(0,3).map((b,j)=>`<button ${j||state.over?'disabled':''} class="${j?'':'front'}" data-lane="${i}" aria-label="${j?'Hidden bottle':COLORS[b.color].name+' potion, capacity '+b.capacity+', lane '+(i+1)}">${bottle(b,65,j>0)}${j?'':`<span class="capacity">${b.capacity}</span>`}</button>`).join('')+(lane.length>3?`<span class="queued-more">+${lane.length-3}</span>`:''):'<span class="lane-cleared" aria-label="Lane cleared">✧</span>';});
+ renderQueue();
  window.potionFluid?.invalidate(slotNodes,structural);
 }
 function snapshot(){return JSON.stringify({logLength:runLog.length,state,effects:effects.map(e=>({...e,start:0})),physics:{settled:physics?.settled||false,quietSteps:physics?.quietSteps||0}});}
@@ -54,17 +54,46 @@ function newGame(level=1,prepared){
  window.potionFluid?.reset();state=prepared||generate(level);state.scoring=PotionScore.fresh();
  runLog=[];ranked=true;runTicket=null;rankConnection='Connecting';const serial=++runSerial;
  window.PotionOnline?.start(level).then(ticket=>{if(serial!==runSerial)return;runTicket=ticket;rankConnection=ticket?'Ranked':'Offline';render();});
- history=[];effects=[];busy=false;lastTick=performance.now();resetPhysics();$('modal').classList.add('hidden');$('restart').onclick=()=>loadLevel(state.level);render();
+ history=[];effects=[];busy=false;lastTick=performance.now();nextDrawAt=0;resetPhysics();$('modal').classList.add('hidden');$('restart').onclick=()=>loadLevel(state.level);render();
 }
-function choose(lane){if(state.over||!state.lanes[lane]?.length)return;const slot=state.shelf.indexOf(null);if(slot<0)return;history.push(snapshot());const b=state.lanes[lane].shift();state.shelf[slot]={...b,fill:0};state.moves++;runLog.push({type:"place",lane});PotionScore.place(state.scoring);bottleMotion[slot].velocity=(b.shape%2?1:-1)*.85;bottleMotion[slot].lift=-7;tone(330+b.color*40,.06);render();}
+function renderQueue(){
+ const queue=state.queue||[],signature=state.level+':'+queue.filter(t=>t.taken).map(t=>t.id).join(',')+':'+state.over;
+ if(queueMeta[0]===signature)return;queueMeta[0]=signature;
+ const rows=Math.max(...queue.map(t=>t.row),0)+1;$('queues').style.setProperty('--rows',rows);
+ const connectors=queue.flatMap(t=>t.blockers.map(id=>{const p=queue.find(a=>a.id===id);return !p||p.taken||t.taken?'':`<path d="M${(p.x+.5)/7*350} ${p.row*51+33}V${p.row*51+47}H${(t.x+.5)/7*350}V${t.row*51+10}"/>`;})).join('');
+ const walls=Array.from({length:rows},(_,row)=>Array.from({length:7},(_,x)=>queue.some(t=>t.row===row&&Math.abs(t.x-x)<.6)?'':`<span class="queue-stone" style="left:${x/7*100}%;top:${row*51}px"></span>`).join('')).join('');
+ $('queues').innerHTML=walls+`<svg class="queue-links" viewBox="0 0 350 ${rows*51}" preserveAspectRatio="none" aria-hidden="true">${connectors}</svg>`+queue.map(t=>{
+  if(t.taken)return '';const open=PotionRules.exposed(queue,t),near=t.blockers.some(id=>{const p=queue.find(a=>a.id===id);return p&&PotionRules.exposed(queue,p);}),known=open||near;
+  return `<button class="queue-flask ${open?'exposed':'blocked'}" data-tile="${t.id}" ${!open||state.over?'disabled':''} style="left:${(t.x+.5)/7*100}%;top:${t.row*51}px" aria-label="${known?COLORS[t.color].name+' flask, capacity '+t.capacity:'Hidden flask'}, ${open?'available':'blocked'}, flask ${t.id+1}">${bottle(t,65,!known)}<span class="tile-capacity">${known?t.capacity:'?'}</span>${open?'':'<span class="tile-lock" aria-hidden="true">⌑</span>'}</button>`;
+ }).join('');
+}
+function choose(id){
+ if(state.over)return;const b=state.queue?.find(t=>t.id===id),slot=state.shelf.indexOf(null);
+ if(!b||slot<0||!PotionRules.exposed(state.queue,b))return;
+ history.push(snapshot());b.taken=true;state.shelf[slot]={...b,fill:0};state.moves++;
+ runLog.push({type:'place',tile:id});PotionScore.place(state.scoring);nextDrawAt=performance.now()+280;bottleMotion[slot].velocity=(b.shape%2?1:-1)*.85;bottleMotion[slot].lift=-7;tone(330+b.color*40,.06);render();
+}
 function tick(now){
- if(state.over||effects.length||now-lastTick<240||!physics?.settled)return;lastTick=now;
- for(let i=0;i<state.shelf.length;i++){const b=state.shelf[i];if(!b)continue;const drop=physics.bottom(b.color)[0];if(!drop)continue;const col=state.columns.findIndex(c=>c.some(d=>d.id===drop.id));state.columns[col]=state.columns[col].filter(d=>d.id!==drop.id);physics.remove(drop.id);busy=true;$('undo').disabled=true;
-  effects.push({gemId:drop.id,color:drop.color,radius:drop.drawRadius||drop.radius,from:{x:drop.x??55+col*50,y:drop.y||220},to:{x:36+i*72,y:298},start:now,duration:850,slot:i});tone(460+drop.color*70,.04);return;}
- busy=false;$('undo').disabled=!history.length;
- if(state.brewed===state.bottleCount){state.over=true;try{localStorage.setItem('potion-level',String(state.level+1));}catch{}render();showEnd(true);}else if(state.shelf.every(Boolean)){state.over=true;render();showEnd(false);}
+ if(state.over||now<nextDrawAt||now-lastTick<110||!physics?.settled)return;lastTick=now;
+ const drops=PotionRules.plan(state.shelf,physics.bottom(),effects);
+ if(drops.length){
+  const concurrent=effects.length+drops.length;runLog.push({type:'draw',drops});PotionScore.burst(state.scoring,concurrent);
+  if(concurrent>1)flashScore((concurrent>=3?'WOMBO!':'COMBO!')+' ×'+state.scoring.combo);
+  for(const drop of drops){const gem=physics.bodies.get(drop.gem).plugin.gem;const col=state.columns.find(c=>c.some(g=>g.id===gem.id));col.splice(col.findIndex(g=>g.id===gem.id),1);
+   physics.remove(gem.id);effects.push({gemId:gem.id,color:gem.color,radius:gem.drawRadius,from:{x:gem.x,y:gem.y},to:{x:36+drop.slot*72,y:298},start:now,duration:1100,slot:drop.slot});tone(460+gem.color*70,.06);
+  }
+  busy=true;render();return;
+ }
+ busy=effects.length>0;$('undo').disabled=!history.length||busy;if(busy)return;
+ if(state.brewed===state.bottleCount){state.over=true;try{localStorage.setItem('potion-blocked-level',String(state.level+1));}catch{}render();showEnd(true);}
+ else if(state.shelf.every(Boolean)){state.over=true;PotionScore.breakChain(state.scoring);render();showEnd(false);}
 }
-function completePour(e){const b=state.shelf[e.slot];if(!b)return;runLog.push({type:"pour",gem:e.gemId,slot:e.slot});const oldScore=state.scoring?.score||0;if(state.scoring)PotionScore.gem(state.scoring);b.fill++;bottleMotion[e.slot].velocity+=(e.from.x<180?1:-1)*.55;if(b.fill===b.capacity){state.shelf[e.slot]=null;state.brewed++;if(state.scoring){PotionScore.clear(state.scoring,b.capacity,b.color,state.level);flashScore((state.scoring.combo>=3?"WOMBO! ":state.scoring.combo>=2?"COMBO! ":"")+"×"+state.scoring.combo+"  +"+(state.scoring.score-oldScore));}tone(880,.14);}busy=false;render();}
+function completePour(e){
+ const b=state.shelf[e.slot];if(!b)return;runLog.push({type:'finish',gem:e.gemId});PotionScore.gem(state.scoring);b.fill++;
+ bottleMotion[e.slot].velocity+=(e.from.x<180?1:-1)*.55;
+ if(b.fill===b.capacity){const before=state.scoring.score;state.shelf[e.slot]=null;state.brewed++;PotionScore.clear(state.scoring,b.capacity,b.color,state.level);if(state.scoring.combo>1)flashScore((state.scoring.combo>=3?'WOMBO!':'COMBO!')+' ×'+state.scoring.combo+'  +'+(state.scoring.score-before));tone(880,.14);}
+ busy=effects.length>0;render();
+}
 function tone(freq,duration){if(!sound)return;try{audio??=new (window.AudioContext||window.webkitAudioContext)();if(audio.state==='suspended')audio.resume();const o=audio.createOscillator(),g=audio.createGain();o.frequency.setValueAtTime(freq,audio.currentTime);g.gain.setValueAtTime(.035,audio.currentTime);g.gain.exponentialRampToValueAtTime(.001,audio.currentTime+duration);o.connect(g);g.connect(audio.destination);o.start();o.stop(audio.currentTime+duration);}catch{}}
 function roundRect(x,y,w,h,r){ctx.beginPath();ctx.roundRect(x,y,w,h,r);}
 function layoutGems(columns){columns.forEach(column=>{const raw=column.reduce((n,d)=>n+d.radius*2*d.aspect+2,0),fit=Math.min(1,211/raw);let bottom=235;for(let j=column.length-1;j>=0;j--){const d=column[j];d.drawRadius??=d.radius*fit;const r=d.drawRadius,ry=r*d.aspect;d.targetY=bottom-ry;d.y??=d.targetY;d.y+=(d.targetY-d.y)*.13;bottom-=ry*2+2;}});}
@@ -89,12 +118,12 @@ function draw(now){ const frameStart=window.frameMeter?.begin(now);
 }
 function showEnd(won){if(won&&state.scoring)PotionScore.finish(state.scoring,state.level);render();if($('resultScore')){$('resultScore').textContent=state.scoring.score.toLocaleString();$('submitScore').classList.toggle('hidden',!won||!ranked);$('submitStatus').textContent='';$('postScore').disabled=false;$('postScore').textContent='Submit score';}modalMode=won?'win':'lose';$('modalTitle').textContent=won?'✧':'↻';$('modalTitle').setAttribute('aria-label',won?'Level completed':'Shelf blocked');$('modalAction').textContent=won?'→':'↶';$('modalAction').setAttribute('aria-label',won?'Next level':'Undo last bottle');$('modal').classList.remove('hidden');$('modalAction').focus();}
 function undo(){if(!history.length)return;window.potionFluid?.reset();const saved=JSON.parse(history.pop());state=saved.state;runLog.length=saved.logLength||0;ranked=false;state.over=false;effects=saved.effects.map(e=>({...e,start:performance.now()}));busy=!!effects.length;lastTick=performance.now();resetPhysics();if(physics&&saved.physics){physics.settled=saved.physics.settled;physics.quietSteps=saved.physics.quietSteps;physics.sync();}$('modal').classList.add('hidden');render();}
-$('queues').addEventListener('click',e=>{const b=e.target.closest('button[data-lane]');if(b&&!b.disabled)choose(Number(b.dataset.lane));});$('restart').onclick=()=>loadLevel(state.level);$('undo').onclick=undo;$('sound').onclick=()=>{sound=!sound;$('sound').textContent=sound?'♫':'♪';$('sound').setAttribute('aria-label',sound?'Mute sound':'Enable sound');tone(660,.1);};$('modalAction').onclick=()=>{if(modalMode==='win')loadLevel(Math.min(30,state.level+1));else undo();};
+$('queues').addEventListener('click',e=>{const b=e.target.closest('button[data-tile]');if(b&&!b.disabled)choose(Number(b.dataset.tile));});$('restart').onclick=()=>loadLevel(state.level);$('undo').onclick=undo;$('sound').onclick=()=>{sound=!sound;$('sound').textContent=sound?'♫':'♪';$('sound').setAttribute('aria-label',sound?'Mute sound':'Enable sound');tone(660,.1);};$('modalAction').onclick=()=>{if(modalMode==='win')loadLevel(Math.min(30,state.level+1));else undo();};
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='z'){e.preventDefault();undo();}});
 // Challenge mode has no gem-drag control: buried colors must fall naturally.
 $('shake').onclick=()=>{if(!physics||state.over)return;history.push(snapshot());ranked=false;if(state.scoring)PotionScore.breakChain(state.scoring);render();physics.nudge();$('undo').disabled=false;document.querySelector('.game').animate([{transform:'rotate(0)'},{transform:'rotate(-.45deg)'},{transform:'rotate(.4deg)'},{transform:'rotate(0)'}],{duration:360,easing:'ease-out'});tone(220,.08);};
 
-function flashScore(text){const el=$('scoreFlash');if(!el)return;el.textContent=text;el.getAnimations?.().forEach(a=>a.cancel());el.animate?.([{opacity:0,transform:'translateY(8px)'},{opacity:1,offset:.15},{opacity:1,offset:.7},{opacity:0,transform:'translateY(-12px)'}],{duration:1500,fill:'forwards'});}
+function flashScore(text){const el=$('scoreFlash');if(!el)return;el.textContent=text;el.getAnimations?.().forEach(a=>a.cancel());el.animate?.([{opacity:0,transform:'translateY(8px)'},{opacity:1,offset:.15},{opacity:1,offset:.7},{opacity:0,transform:'translateY(-12px)'}],{duration:2600,fill:'forwards'});}
 if($('leaderboard')?.addEventListener&&window.PotionOnline){$('leaderboard').onclick=()=>window.PotionOnline.open(state?.level||1);$('postScore').onclick=async()=>{const btn=$('postScore');btn.disabled=true;$('submitStatus').textContent='Submitting…';try{if(!runTicket)throw Error('Reconnect and replay to rank this run.');const result=await window.PotionOnline.submit(runTicket,$('playerName').value,runLog);$('submitStatus').textContent='Saved · #'+result.rank;btn.textContent='Submitted';}catch(e){$('submitStatus').textContent=e.message;btn.disabled=false;}};}
 
 document.addEventListener('potion-level',event=>loadLevel(event.detail));

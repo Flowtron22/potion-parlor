@@ -1,5 +1,7 @@
 # Potion Parlor: engagement and scoring
 
+Historical notes from the first scoring pass. The current blocked queues, simultaneous pours, tighter shelves and separate leaderboard rules are documented in [BLOCKED-QUEUE.md](BLOCKED-QUEUE.md).
+
 The previous queues used round-robin assignment from the winning route. That exposed the next four solution choices and made the five-slot shelf forgiving. The revised generator preserves a physical winning route but distributes it across unpredictable queues.
 
 ## Implemented progression

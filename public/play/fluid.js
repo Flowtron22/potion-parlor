@@ -49,9 +49,12 @@ class LiquidScene {
    const tear=new THREE.SphereGeometry(1,20,16),vertices=tear.attributes.position;for(let i=0;i<vertices.count;i++){const y=vertices.getY(i),t=.76-.24*y;vertices.setX(i,vertices.getX(i)*t);vertices.setZ(i,vertices.getZ(i)*t);}tear.computeVertexNormals();
    const hex=new THREE.CylinderGeometry(1,1,1.05,6,1);hex.rotateX(Math.PI/2);
    this.geometries=[new THREE.SphereGeometry(1,20,16),new THREE.OctahedronGeometry(1),hex,new THREE.DodecahedronGeometry(1),tear,new THREE.TetrahedronGeometry(1)];this.meshes=new Map();this.materials=new Map();this.textures=new Map();this.splashes=[];this.seen=new WeakSet();this.available=true;
-   this.uniforms={uSize:{value:new THREE.Vector2()},uOffset:{value:new THREE.Vector2()},uTime:{value:0},uColor:{value:new THREE.Color()},uDrops:{value:Array.from({length:48},()=>new THREE.Vector4(-9999,-9999,0,0))}};
-   this.streamGeometry=new THREE.PlaneGeometry(1,1);this.streamMaterial=new THREE.ShaderMaterial({uniforms:this.uniforms,vertexShader:vertex,fragmentShader:fragment,transparent:true,depthWrite:false,extensions:{derivatives:true}});
-   this.stream=new THREE.Mesh(this.streamGeometry,this.streamMaterial);this.stream.position.z=80;this.stream.frustumCulled=false;this.scene.add(this.stream);
+   this.streamGeometry=new THREE.PlaneGeometry(1,1);
+   this.streams=Array.from({length:5},()=>{
+     const uniforms={uSize:{value:new THREE.Vector2()},uOffset:{value:new THREE.Vector2()},uTime:{value:0},uColor:{value:new THREE.Color()},uDrops:{value:Array.from({length:48},()=>new THREE.Vector4(-9999,-9999,0,0))}};
+     const material=new THREE.ShaderMaterial({uniforms,vertexShader:vertex,fragmentShader:fragment,transparent:true,depthWrite:false,extensions:{derivatives:true}}),mesh=new THREE.Mesh(this.streamGeometry,material);
+     mesh.position.z=80;mesh.frustumCulled=false;mesh.visible=false;this.scene.add(mesh);return{mesh,uniforms};
+   });
    this.renderer.domElement.addEventListener('webglcontextlost',e=>{e.preventDefault();this.available=false;this.root.style.display='none';});
    this.renderer.domElement.addEventListener('webglcontextrestored',()=>{this.available=true;this.root.style.display='';});
    this.observer=new ResizeObserver(()=>this.measure());this.observer.observe(document.querySelector('.game'));this.measure();
@@ -87,13 +90,15 @@ class LiquidScene {
      group.userData.sphere.rotation.z=-(d.renderAngle??d.angle??0);group.rotation.z=0;group.children[1].scale.set(r*1.25,r*1.25,1);group.children[1].position.z=r*.8+2;
    }));
    for(const [id,group] of this.meshes){if(!live.has(id)){this.scene.remove(group);group.children[1].material.dispose();this.meshes.delete(id);}}
-   const drops=this.uniforms.uDrops.value;drops.forEach(d=>d.set(-9999,-9999,0,0));let k=0;
-   for(const e of effects){
+   this.streams.forEach(s=>s.mesh.visible=false);
+   for(const [index,e] of effects.entries()){
+     const item=this.streams[index];if(!item)break;const {mesh:stream,uniforms}=item;stream.visible=true;
+     const drops=uniforms.uDrops.value;drops.forEach(d=>d.set(-9999,-9999,0,0));let k=0;uniforms.uTime.value=t;
      const p=Math.min(1,(now-e.start)/e.duration);let target=this.targets[e.slot]||{x:e.to.x*this.scaleX,y:this.height-30};
      const m=motions[e.slot];if(m)target={x:target.x+(target.neck||0)*Math.sin(m.angle),y:target.y+(target.neck||0)*(1-Math.cos(m.angle))+m.lift};
      const source={x:e.from.x*this.scaleX,y:e.from.y*this.scaleY},color=colors[e.color].hex;
-     const left=Math.min(source.x,target.x)-42,top=Math.min(source.y,target.y)-42,w=Math.abs(source.x-target.x)+84,h=Math.abs(source.y-target.y)+84;this.uniforms.uSize.value.set(w,h);this.uniforms.uOffset.value.set(left,top);this.stream.scale.set(w,h,1);this.stream.position.set(left+w/2,this.height-top-h/2,80);
-     this.uniforms.uColor.value.set(color);
+     const left=Math.min(source.x,target.x)-42,top=Math.min(source.y,target.y)-42,w=Math.abs(source.x-target.x)+84,h=Math.abs(source.y-target.y)+84;uniforms.uSize.value.set(w,h);uniforms.uOffset.value.set(left,top);stream.scale.set(w,h,1);stream.position.set(left+w/2,this.height-top-h/2,80);
+     uniforms.uColor.value.set(color);
      // The source stretches into a neck, then becomes a continuous wavy jet.
      if(p<.3)drops[k++].set(source.x,source.y,Math.min(6,e.radius*.35)*this.scaleX*(1-p/.3),0);
      const end=Math.min(1,p/.32),start=Math.max(0,(p-.68)/.32);
@@ -110,12 +115,9 @@ class LiquidScene {
        drops[k++].set(target.x,target.y,1.8*this.scaleX,0);
        const slot=this.slots[e.slot];if(slot&&!slot.classList.contains('pouring'))slot.classList.add('pouring');
      }
-     if(!this.seen.has(e)){this.seen.add(e);this.splashes.push({target,start:e.start+e.duration*.85,color,slot:e.slot});}
    }
-   this.splashes=this.splashes.filter(s=>now-s.start<500);
-   if(!effects.length)for(const s of this.slots)if(s.classList.contains('pouring'))s.classList.remove('pouring');
-   if(!effects.length&&this.splashes.length){const s=this.splashes[this.splashes.length-1],age=Math.max(0,(now-s.start)/500);this.uniforms.uColor.value.set(s.color);for(let j=0;j<9;j++){drops[k++].set(s.target.x+(j-4)*7*age,s.target.y-16*age+20*age*age,Math.max(0,(1-age)*1.1),0);}}
-   this.stream.visible=!!(effects.length||this.splashes.length);this.uniforms.uTime.value=t;this.renderer.render(this.scene,this.camera);this.renderCount++;this.dirty=false;
+   this.splashes=[];const pouring=new Set(effects.map(e=>e.slot));for(let i=0;i<this.slots.length;i++)this.slots[i].classList.toggle('pouring',pouring.has(i));
+   this.renderer.render(this.scene,this.camera);this.renderCount++;this.dirty=false;
  }
  reset(){this.dirty=true;this.splashes=[];this.seen=new WeakSet();for(const group of this.meshes.values()){this.scene.remove(group);group.children[1].material.dispose();}this.meshes.clear();}
 }

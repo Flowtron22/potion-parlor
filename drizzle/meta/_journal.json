@@ -8,6 +8,13 @@
       "when": 1792192102197,
       "tag": "0000_loud_morbius",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1792193324880,
+      "tag": "0001_fearless_stryfe",
+      "breakpoints": true
     }
   ]
 }
