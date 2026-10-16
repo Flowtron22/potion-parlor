@@ -24,7 +24,7 @@ function render(){
  $('undo').disabled=!history.length||busy;
 }
 function status(message){$('status').textContent=message;}
-function newGame(level=1){state=generate(level);history=[];effects=[];busy=false;lastTick=performance.now();render();status('Pick a potion below. Let the magic flow.');}
+function newGame(level=1){window.potionFluid?.reset();state=generate(level);history=[];effects=[];busy=false;lastTick=performance.now();render();status('Pick a potion below. Let the magic flow.');}
 function choose(lane){
  if(state.over||!state.lanes[lane]?.length)return;
  const slot=state.shelf.indexOf(null);if(slot<0){status('Your shelf is full — wait for the pour, or undo.');return;}
@@ -40,7 +40,7 @@ function tick(now){
   const col=state.columns.findIndex(c=>c.length&&c[c.length-1].color===b.color);
   if(col<0)continue;
   const drop=state.columns[col].pop();busy=true;$('undo').disabled=true;
-  effects.push({color:drop.color,from:{x:55+col*50,y:219},to:{x:36+i*72,y:298},start:now,duration:520,slot:i});tone(460+drop.color*70,.04);return;
+  effects.push({color:drop.color,from:{x:55+col*50,y:219},to:{x:36+i*72,y:298},start:now,duration:1150,slot:i});tone(460+drop.color*70,.04);return;
  }
  busy=false;$('undo').disabled=!history.length;
  if(state.brewed===12){state.over=true;try{localStorage.setItem('potion-level',String(state.level+1));}catch{};render();showEnd(true);return;}
@@ -62,7 +62,7 @@ function draw(now){time=now/1000;ctx.clearRect(0,0,360,290);
  const glass=ctx.createLinearGradient(24,0,336,0);glass.addColorStop(0,'#9bb69c44');glass.addColorStop(.08,'#adc9ac10');glass.addColorStop(.85,'#d7e3c608');glass.addColorStop(1,'#accbaf33');roundRect(22,12,316,241,24);ctx.fillStyle=glass;ctx.fill();ctx.lineWidth=1.5;ctx.strokeStyle='#9bb99c66';ctx.stroke();
  ctx.save();roundRect(26,16,308,231,20);ctx.clip();
  // The fluid settles down the columns as the exposed drops are collected.
- state.columns.forEach((column,i)=>column.forEach((d,j)=>{const target=44+(6-column.length+j)*35;d.y??=target;d.y+=(target-d.y)*.11;orb(55+i*50,d.y,d.color,d.seed,time);}));
+ state.columns.forEach((column,i)=>column.forEach((d,j)=>{const target=44+(6-column.length+j)*35;d.y??=target;d.y+=(target-d.y)*.11;if(!window.potionFluid?.available)orb(55+i*50,d.y,d.color,d.seed,time);}));
  ctx.fillStyle='#e9f6df14';roundRect(30,30,3,195,2);ctx.fill();ctx.restore();
  for(const x of [23,314]){roundRect(x,4,23,10,3);ctx.fillStyle='#b9a572';ctx.fill();ctx.fillStyle='#e5d39a';ctx.fillRect(x+3,5,17,2);}
  ctx.fillStyle='#afcdb01c';roundRect(43,243,274,3,2);ctx.fill();
@@ -70,15 +70,16 @@ function draw(now){time=now/1000;ctx.clearRect(0,0,360,290);
  const completed=[];effects.forEach(e=>{
   const p=Math.min(1,(now-e.start)/e.duration),c=COLORS[e.color].hex;
   const point=q=>{const inv=1-q;return{x:inv*inv*e.from.x+2*inv*q*e.to.x+q*q*e.to.x,y:inv*inv*e.from.y+2*inv*q*(e.from.y+40)+q*q*e.to.y};};
-  ctx.save();ctx.shadowColor=c;ctx.shadowBlur=14;ctx.strokeStyle=c;ctx.lineWidth=5;ctx.lineCap='round';ctx.beginPath();for(let j=0;j<=20;j++){const q=Math.max(0,p-.32)+j/20*Math.min(p,.32),a=point(q);j?ctx.lineTo(a.x,a.y):ctx.moveTo(a.x,a.y);}ctx.stroke();const head=point(p);ctx.beginPath();ctx.ellipse(head.x,head.y,4,6,0,0,7);ctx.fillStyle=c;ctx.fill();ctx.restore();if(p>=1)completed.push(e);
+  if(!window.potionFluid?.available){ctx.save();ctx.shadowColor=c;ctx.shadowBlur=14;ctx.strokeStyle=c;ctx.lineWidth=5;ctx.lineCap='round';ctx.beginPath();for(let j=0;j<=20;j++){const q=Math.max(0,p-.32)+j/20*Math.min(p,.32),a=point(q);j?ctx.lineTo(a.x,a.y):ctx.moveTo(a.x,a.y);}ctx.stroke();const head=point(p);ctx.beginPath();ctx.ellipse(head.x,head.y,4,6,0,0,7);ctx.fillStyle=c;ctx.fill();ctx.restore();}if(p>=1)completed.push(e);
  });
+ window.potionFluid?.update(now,state.columns,effects,COLORS);
  for(const e of completed){effects.splice(effects.indexOf(e),1);completePour(e);}
  if($('modal').classList.contains('hidden'))tick(now);animFrame=requestAnimationFrame(draw);
 }
 const helpHTML=$('modalBody').innerHTML;
 function openHelp(){modalMode='help';$('modalTitle').textContent='Pour a little magic.';$('modalBody').innerHTML=helpHTML;$('modalAction').innerHTML='Let’s brew <span>→</span>';$('modal').classList.remove('hidden');$('modalAction').focus();}
 function showEnd(won){modalMode=won?'win':'lose';$('modalTitle').textContent=won?'Beautifully brewed.':'A little tangled magic.';$('modalBody').innerHTML=won?`<p>All 36 drops, twelve perfect potions. You cleared the cellar in <b>${state.moves} moves</b>.</p><p>A fresh collection of enchanted essences is waiting for you.</p>`:'<p>All five shelf slots are waiting for colors that are buried in the reservoir.</p><p>Use <b>Undo</b> to rethink your last bottle, or restart this brew. Watch the bottom drops to plan your next pour.</p>';$('modalAction').innerHTML=won?'Next brew <span>→</span>':'Undo last bottle <span>↶</span>';$('modal').classList.remove('hidden');$('modalAction').focus();}
-function undo(){if(!history.length)return;state=JSON.parse(history.pop());state.over=false;effects=[];busy=false;lastTick=performance.now();$('modal').classList.add('hidden');render();status('One step back. A fresh possibility.');}
+function undo(){if(!history.length)return;window.potionFluid?.reset();state=JSON.parse(history.pop());state.over=false;effects=[];busy=false;lastTick=performance.now();$('modal').classList.add('hidden');render();status('One step back. A fresh possibility.');}
 document.getElementById('queues').addEventListener('click',e=>{const b=e.target.closest('button[data-lane]');if(b&&!b.disabled)choose(Number(b.dataset.lane));});
 $('restart').onclick=()=>{newGame(state.level);};$('undo').onclick=undo;$('help').onclick=openHelp;$('sound').onclick=()=>{sound=!sound;$('sound').textContent=sound?'♫':'♪';$('sound').setAttribute('aria-label',sound?'Mute sound':'Enable sound');$('sound').style.color=sound?'#e9c982':'';tone(660,.1);};
 $('modalAction').onclick=()=>{const mode=modalMode;$('modal').classList.add('hidden');if(mode==='win')newGame(state.level+1);if(mode==='lose')undo();};
