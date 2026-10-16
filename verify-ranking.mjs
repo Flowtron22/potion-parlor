@@ -1,0 +1,9 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {GemPhysics} from './server/physics.mjs';
+import {PotionScore} from './server/scoring.mjs';
+import {validateRun} from './server/validate.mjs';
+const levels=JSON.parse(fs.readFileSync('server/levels.json','utf8'));
+export function winningEvents(board){const world=new GemPhysics();world.reset(structuredClone(board.columns));world.settle();const events=[];for(const bottle of board.solution){events.push({type:'place',lane:bottle.lane});for(let i=0;i<bottle.capacity;i++){const gem=world.bottom(bottle.color)[0];assert(gem);events.push({type:'pour',slot:0,gem:gem.id});world.remove(gem.id);world.settle();}}return events;}
+for(const index of [0,3,8,12,19,29]){const board=levels[index],events=winningEvents(board),result=validateRun(board,events);assert(result.score>0);assert(result.best>=2);assert.equal(board.slots,index<3?5:index<12?4:3);const corrupt=structuredClone(events);corrupt.find(e=>e.type==='pour').gem=99999;assert.throws(()=>validateRun(board,corrupt));assert.throws(()=>validateRun(board,events.slice(1)));console.log('PASS: server physics replay and forged-event rejection · level '+board.level);}
+const chain=PotionScore.fresh();PotionScore.place(chain);PotionScore.clear(chain,2,0,1);PotionScore.clear(chain,2,1,1);assert.equal(chain.combo,3);const ordinary=PotionScore.fresh();PotionScore.place(ordinary);PotionScore.clear(ordinary,2,0,1);PotionScore.place(ordinary);PotionScore.clear(ordinary,2,1,1);assert(chain.score>ordinary.score);PotionScore.clear(chain,2,1,1);assert.equal(chain.streak,1);PotionScore.breakChain(chain);assert.equal(chain.combo,1);PotionScore.finish(chain,1);const final=chain.score;PotionScore.finish(chain,1);assert.equal(chain.score,final);console.log('PASS: cascade bonus, color-chain reset, capped multiplier and finish idempotency.');

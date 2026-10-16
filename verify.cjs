@@ -1,7 +1,7 @@
 const fs=require('fs'),vm=require('vm'),assert=require('assert');
-const elements={};function element(){return{innerHTML:'',textContent:'',style:{},classList:{add(){},remove(){},contains(){return true}},setAttribute(){},addEventListener(){},focus(){}};}
+const elements={};function element(){return{innerHTML:'',textContent:'',style:{},classList:{add(){},remove(){},toggle(){},contains(){return true}},setAttribute(){},addEventListener(){},focus(){}};}
 const context={console,CHECK_LEVELS:Math.max(5,Number(process.env.POTION_CHECK_LEVELS)||50),performance:{now:()=>0},devicePixelRatio:1,requestAnimationFrame:()=>0,document:{getElementById:id=>elements[id]??=(id==='game'?{...element(),getContext:()=>({setTransform(){}})}:element()),addEventListener(){}},window:{addEventListener(){}}};
-vm.createContext(context);for(const path of ['dist/vendor/matter.min.js','dist/physics.js','dist/level-builder.js','dist/game.js']){vm.runInContext(fs.readFileSync(path,'utf8'),context);if(path==='dist/level-builder.js')context.window.PotionLevels=context.PotionLevels;}
+vm.createContext(context);for(const path of ['public/play/vendor/matter.min.js','public/play/physics.js','public/play/level-builder.js','public/play/scoring.js','public/play/game.js']){vm.runInContext(fs.readFileSync(path,'utf8'),context);if(path==='public/play/level-builder.js')context.window.PotionLevels=context.PotionLevels;}
 vm.runInContext(`
 const assert=(ok,message)=>{if(!ok)throw Error(message)};const floorCounts=new Set(),amounts=new Set();let poured=0;
 for(let level=1;level<=CHECK_LEVELS;level++){
@@ -10,7 +10,7 @@ for(let level=1;level<=CHECK_LEVELS;level++){
  assert(state.columns.flat().every(d=>d.drawRadius>=23),'Gems were shrunk');
  assert(state.total===state.solution.reduce((n,b)=>n+b.capacity,0),'Bottle demand mismatch');
  for(let move=0;move<state.bottleCount;move++){
-  const lane=move%4;assert(state.lanes[lane][0].id===state.solution[move].id,'Lane order');choose(lane);let guard=0;
+  const lane=state.solution[move].lane;assert(state.lanes[lane][0].id===state.solution[move].id,'Lane order');choose(lane);let guard=0;
   while(state.shelf.some(Boolean)&&guard++<20){
    physics.settle();tick((move*100+guard)*1000);
    if(effects.length){completePour(effects[0]);effects=[];poured++;}
@@ -33,4 +33,5 @@ newGame(1);physics.settle();choose(0);tick(10000);assert(effects.length===1,'No 
 assert(state.columns.flat().length+effects.length+state.shelf.reduce((n,b)=>n+(b?.fill||0),0)===state.total,'Liquid conservation');
 console.log('PASS: '+CHECK_LEVELS+' physical winning routes; 6-8 floor gems; enlarged sizes; upper/airborne/side-wall rejection; falling unlocks; variable demand; undo conservation.');
 `,context);
-assert(!fs.readFileSync('dist/index.html','utf8').includes('codex-preview'));
+assert(!fs.readFileSync('public/play/index.html','utf8').includes('codex-preview'));
+

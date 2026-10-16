@@ -1,0 +1,7 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+(async()=>{const {validateRun}=await import('./server/validate.mjs'),boards=JSON.parse(fs.readFileSync('server/levels.json','utf8'));
+ const els={},element=()=>({style:{},classList:{add(){},remove(){},toggle(){},contains(){return true}},setAttribute(){},addEventListener(){},focus(){}});
+ const c={console,performance:{now:()=>0},devicePixelRatio:1,requestAnimationFrame(){},document:{getElementById:id=>els[id]??=(id==='game'?{...element(),getContext:()=>({setTransform(){}})}:element()),addEventListener(){}},window:{addEventListener(){}},checkRun:(board,events)=>{const result=validateRun(boards[board.level-1],JSON.parse(JSON.stringify(events)));assert.equal(result.score,board.scoring.score);console.log('PASS: browser and server score agree · level '+board.level+' · '+result.score);}};
+ vm.createContext(c);for(const file of ['vendor/matter.min.js','physics.js','level-builder.js','scoring.js','game.js']){vm.runInContext(fs.readFileSync('public/play/'+file,'utf8'),c);if(file==='level-builder.js')c.window.PotionLevels=c.PotionLevels;}
+ vm.runInContext(`for(const level of [1,4,9,13,30]){newGame(level);physics.settle();let clock=1000;for(const bottle of state.solution){choose(bottle.lane);let guard=0;while(state.shelf.some(Boolean)&&guard++<20){physics.settle();tick(clock+=1000);if(effects.length){completePour(effects[0]);effects=[];}}}physics.settle();tick(clock+1000);checkRun(state,runLog);}`,c);
+})().catch(error=>{console.error(error);process.exitCode=1;});

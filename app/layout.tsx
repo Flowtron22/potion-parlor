@@ -1,0 +1,1 @@
+import type {Metadata} from "next"; export const metadata:Metadata={title:"Potion Parlor",description:"A cozy potion puzzle with cascading combos and shared rankings."}; export default function Layout({children}:{children:React.ReactNode}){return <html lang="en"><body>{children}</body></html>;}

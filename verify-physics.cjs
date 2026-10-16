@@ -1,5 +1,5 @@
 const fs=require('fs'),vm=require('vm');
-const context={console,window:{}};vm.createContext(context);vm.runInContext(fs.readFileSync('dist/vendor/matter.min.js','utf8'),context);vm.runInContext(fs.readFileSync('dist/physics.js','utf8'),context);
+const context={console,window:{}};vm.createContext(context);vm.runInContext(fs.readFileSync('public/play/vendor/matter.min.js','utf8'),context);vm.runInContext(fs.readFileSync('public/play/physics.js','utf8'),context);
 vm.runInContext(`
 const assert=(ok,message)=>{if(!ok)throw Error(message)};
 const gem=(id,x,y,r,shape=0)=>({id,color:id%6,x,y,radius:r,drawRadius:r,aspect:1,shape,seed:1});
@@ -17,9 +17,9 @@ const saved=JSON.parse(JSON.stringify(cols));world.reset(saved);for(const d of s
 function run(fps){const d=gem(9,170,60,14,4),columns=[[d]],w=new GemPhysics();w.reset(columns);w.lastTime=1;for(let i=1;i<=fps*3;i++)w.step(1+i*1000/fps,columns);return d;}
 const p=run(30),q=run(60);assert(Math.hypot(p.x-q.x,p.y-q.y)<1,'Frame rate changed physics');
 `,context);
-const elements={};function element(){return{innerHTML:'',textContent:'',style:{},classList:{add(){},remove(){},contains(){return true}},setAttribute(){},addEventListener(){},focus(){}};}
+const elements={};function element(){return{innerHTML:'',textContent:'',style:{},classList:{add(){},remove(){},toggle(){},contains(){return true}},setAttribute(){},addEventListener(){},focus(){}};}
 context.document={getElementById:id=>elements[id]??=(id==='game'?{...element(),getContext:()=>({setTransform(){}})}:element()),addEventListener(){}};context.window.addEventListener=()=>{};context.performance={now:()=>0};context.devicePixelRatio=1;context.requestAnimationFrame=()=>0;
-vm.runInContext(fs.readFileSync('dist/level-builder.js','utf8'),context);context.window.PotionLevels=context.PotionLevels;vm.runInContext(fs.readFileSync('dist/game.js','utf8'),context);
+vm.runInContext(fs.readFileSync('public/play/level-builder.js','utf8'),context);context.window.PotionLevels=context.PotionLevels;vm.runInContext(fs.readFileSync('public/play/scoring.js','utf8'),context);vm.runInContext(fs.readFileSync('public/play/game.js','utf8'),context);
 vm.runInContext(`
 for(let level=1;level<=10;level++){
  newGame(level);for(let t=1;t<5000;t+=1000/60)physics.step(t,state.columns);
@@ -31,3 +31,4 @@ for(let level=1;level<=10;level++){
 }
 `,context);
 console.log('PASS: gravity, size-based mass, collisions, bounds, support removal, rotation, shake, elastic dragging, restore, 30/60 Hz consistency.');
+
