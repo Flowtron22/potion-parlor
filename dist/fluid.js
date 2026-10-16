@@ -78,15 +78,16 @@ class LiquidScene {
    columns.forEach((column,i)=>column.forEach(d=>{
      live.add(d.id);let group=this.meshes.get(d.id);
      if(!group){group=new THREE.Group();const sphere=new THREE.Mesh(this.geometries[d.shape],this.material(colors[d.color].hex));group.add(sphere);const label=new THREE.Sprite(new THREE.SpriteMaterial({map:this.symbolTexture(colors[d.color].hex,colors[d.color].symbol),transparent:true,depthTest:false}));group.add(label);group.userData.sphere=sphere;this.meshes.set(d.id,group);this.scene.add(group);}
-     group.position.set((55+i*50)*this.scaleX,this.height-d.y*this.scaleY,15);
-     const r=d.drawRadius*this.scaleX,wobble=Math.sin(t*2.4+d.seed)*.018;
-     group.userData.sphere.scale.set(r*(1+wobble),r*d.aspect*(1-wobble)*this.scaleY/this.scaleX,r*.72);
-     group.rotation.z=Math.sin(d.seed)*.12+Math.sin(t*1.4+d.seed)*.018;group.children[1].scale.set(r*1.25,r*1.25,1);group.children[1].position.z=r*.8+2;
+     group.position.set((d.x??55+i*50)*this.scaleX,this.height-d.y*this.scaleY,15);
+     const r=d.drawRadius*this.scaleX,squash=d.impact||0;
+     group.userData.sphere.scale.set(r*(1+squash),r*d.aspect*(1-squash)*this.scaleY/this.scaleX,r*.72);
+     group.userData.sphere.rotation.z=-(d.angle||0);group.rotation.z=0;group.children[1].scale.set(r*1.25,r*1.25,1);group.children[1].position.z=r*.8+2;
    }));
    for(const [id,group] of this.meshes){if(!live.has(id)){this.scene.remove(group);group.children[1].material.dispose();this.meshes.delete(id);}}
    const drops=this.uniforms.uDrops.value;drops.forEach(d=>d.set(-9999,-9999,0,0));let k=0;
    for(const e of effects){
-     const p=Math.min(1,(now-e.start)/e.duration),target=this.targets[e.slot]||{x:e.to.x*this.scaleX,y:this.height-30};
+     const p=Math.min(1,(now-e.start)/e.duration);let target=this.targets[e.slot]||{x:e.to.x*this.scaleX,y:this.height-30};
+     const bottle=document.querySelectorAll('.slot')[e.slot]?.querySelector('.bottle'),matrix=bottle?.getScreenCTM();if(matrix){const point=new DOMPoint(30,10).matrixTransform(matrix),board=document.getElementById('game').getBoundingClientRect();target={x:point.x-board.left,y:point.y-board.top};this.targets[e.slot]=target;}
      const source={x:e.from.x*this.scaleX,y:e.from.y*this.scaleY},color=colors[e.color].hex;
      this.uniforms.uColor.value.set(color);
      // The source stretches into a neck, then becomes a continuous wavy jet.

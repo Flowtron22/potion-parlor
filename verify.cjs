@@ -27,6 +27,9 @@ newGame(1);layoutGems(state.columns);const sizes=state.columns.flat().map(d=>d.d
 newGame(1);const before=JSON.stringify(state);choose(0);tick(1000);if(!effects.length)throw Error('No flow');completePour(effects[0]);effects=[];undo();if(JSON.stringify(state)!==before)throw Error('Undo mismatch');
 // Rapid choices during a pour must not overfill the shelf or lose liquid.
 newGame(4);for(let i=0;i<8;i++)choose(i%4);if(state.shelf.filter(Boolean).length!==5)throw Error('Shelf capacity');
+// Undo a second selection while another bottle is pouring: preserve that in-flight gem.
+newGame(1);choose(0);tick(1000);const pendingBefore=effects[0],logicalBefore=JSON.stringify(state);choose(1);undo();if(JSON.stringify(state)!==logicalBefore||effects.length!==1||effects[0].color!==pendingBefore.color)throw Error('Undo lost in-flight liquid');
+const waiting=state.columns.flat().length+effects.length+state.shelf.reduce((n,b)=>n+(b?.fill||0),0);if(waiting!==state.total)throw Error('Liquid conservation during undo');
 `,context);
 assert(!fs.readFileSync('dist/index.html','utf8').includes('codex-preview'));
 console.log('PASS: 250 solvable levels, variable counts and capacities, six gem and bottle shapes, stable gem sizes, exact undo, shelf capacity.');
