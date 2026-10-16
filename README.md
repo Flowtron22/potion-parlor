@@ -12,6 +12,14 @@ Three.js renders six enlarged gem geometries with varied sizes and a custom flui
 
 Each generated level has a verified physical solution. Generation settles a real physics world, derives bottle demands from a floor-contact removal sequence, and replays the sequence in a freshly rebuilt world before accepting it. The resulting bottle order is interleaved into four lanes; only three bottle previews per lane are displayed. Invalid arrangements are regenerated, and recent levels are cached for quick restarts. Other choices may block progress. Colors also have distinct symbols. Sound is opt-in. Level progression is stored locally when available.
 
+## Performance
+
+Browser builds generate and validate levels in `level-worker.js`, keeping the main thread responsive during loading. Recent levels are cached, including restarts. A synchronous fallback supports direct-file and non-Worker environments.
+
+Settled worlds skip engine updates. Gem drawing interpolates between fixed physics steps to avoid uneven motion on displays with different refresh rates. The Three.js liquid surface is hidden while idle and restricted to the active pour's bounding rectangle while flowing. Idle scenes stop redrawing; bottle and queue DOM nodes are retained and only changed when needed. Bottle motion uses cached layout measurements rather than reading layout after every style update, and the WebGL drawing buffer is resized only when its dimensions change.
+
+For nonvisual QA timings, append `?profile` and inspect the document element's data attributes. Normal sessions do not collect frame samples. Run `node verify-performance.cjs` for idle-work and Worker-entrypoint checks; run `POTION_CHECK_LEVELS=5 node verify.cjs` (set the environment variable using your shell's syntax) for a shorter gameplay regression run. Larger runs default to 50 physical winning routes.
+
 ## Gem physics and tactile controls
 
 Matter.js 0.20.0 drives positions, rotation, and collection eligibility in a bounded 2D rigid-body world; Three.js renders the gems at those coordinates. Collider polygons follow each gem's silhouette, mass comes from area and density, and round gems have lower friction and more bounce. A fixed 120 Hz simulation, capped catch-up, damping, and sleeping keep the pile calm and consistent across frame rates. Removing a gem wakes the remaining bodies, so unsupported gems drop and collide rather than slide to predefined positions. The diamond counter gently shakes the jar. Free dragging is disabled in this challenge so it cannot bypass the floor-only rule. Neither color matching nor the former logical columns can make a buried gem collectible.

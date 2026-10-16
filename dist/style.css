@@ -4,3 +4,5 @@
 #game{touch-action:none;cursor:grab}#game.dragging{cursor:grabbing}.bottle{transform-origin:50% 92%;will-change:transform}.potion-fill{transform-box:fill-box;transform-origin:50% 80%;transform:rotate(var(--slosh,0deg));transition:transform .1s linear}.game-footer #shake{width:70px;font-size:13px;letter-spacing:2px;color:#a9c4a5}.game-footer #shake:active{transform:translateY(2px)}
 
 #game{cursor:default;touch-action:pan-y}.queued-more{font-size:8px;color:#759882;letter-spacing:1px}.lane{position:relative}.queued-more{position:absolute;right:7px;bottom:4px}
+
+.loading .progress>div{width:35%!important;animation:loading-sweep 1s ease-in-out infinite alternate}.loading .game-footer button{pointer-events:none;opacity:.3}@keyframes loading-sweep{from{transform:translateX(-90%)}to{transform:translateX(280%)}}

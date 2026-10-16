@@ -19,7 +19,7 @@ const p=run(30),q=run(60);assert(Math.hypot(p.x-q.x,p.y-q.y)<1,'Frame rate chang
 `,context);
 const elements={};function element(){return{innerHTML:'',textContent:'',style:{},classList:{add(){},remove(){},contains(){return true}},setAttribute(){},addEventListener(){},focus(){}};}
 context.document={getElementById:id=>elements[id]??=(id==='game'?{...element(),getContext:()=>({setTransform(){}})}:element()),addEventListener(){}};context.window.addEventListener=()=>{};context.performance={now:()=>0};context.devicePixelRatio=1;context.requestAnimationFrame=()=>0;
-vm.runInContext(fs.readFileSync('dist/game.js','utf8'),context);
+vm.runInContext(fs.readFileSync('dist/level-builder.js','utf8'),context);context.window.PotionLevels=context.PotionLevels;vm.runInContext(fs.readFileSync('dist/game.js','utf8'),context);
 vm.runInContext(`
 for(let level=1;level<=10;level++){
  newGame(level);for(let t=1;t<5000;t+=1000/60)physics.step(t,state.columns);

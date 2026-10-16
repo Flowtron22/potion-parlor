@@ -1,7 +1,7 @@
 const fs=require('fs'),vm=require('vm'),assert=require('assert');
 const elements={};function element(){return{innerHTML:'',textContent:'',style:{},classList:{add(){},remove(){},contains(){return true}},setAttribute(){},addEventListener(){},focus(){}};}
 const context={console,CHECK_LEVELS:Math.max(5,Number(process.env.POTION_CHECK_LEVELS)||50),performance:{now:()=>0},devicePixelRatio:1,requestAnimationFrame:()=>0,document:{getElementById:id=>elements[id]??=(id==='game'?{...element(),getContext:()=>({setTransform(){}})}:element()),addEventListener(){}},window:{addEventListener(){}}};
-vm.createContext(context);for(const path of ['dist/vendor/matter.min.js','dist/physics.js','dist/game.js'])vm.runInContext(fs.readFileSync(path,'utf8'),context);
+vm.createContext(context);for(const path of ['dist/vendor/matter.min.js','dist/physics.js','dist/level-builder.js','dist/game.js']){vm.runInContext(fs.readFileSync(path,'utf8'),context);if(path==='dist/level-builder.js')context.window.PotionLevels=context.PotionLevels;}
 vm.runInContext(`
 const assert=(ok,message)=>{if(!ok)throw Error(message)};const floorCounts=new Set(),amounts=new Set();let poured=0;
 for(let level=1;level<=CHECK_LEVELS;level++){
