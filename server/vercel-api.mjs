@@ -11,7 +11,7 @@ export function createBackendProxy({backend=process.env.POTION_BACKEND_URL||DEFA
   if(origin&&origin!==publicOrigin)return json('Invalid origin',403);
   try{
    const target=new URL('/api/'+path,backend);if(!['http:','https:'].includes(target.protocol)||target.origin===incoming.origin)throw Error('Invalid backend');
-   if(path==='leaderboard')target.searchParams.set('level',incoming.searchParams.get('level')||'1');
+   if(path==='leaderboard'){target.searchParams.set('level',incoming.searchParams.get('level')||'1');if(incoming.searchParams.get('daily')==='1')target.searchParams.set('daily','1');}
    const headers=new Headers({'Accept':'application/json','Origin':target.origin});
    const player=request.headers.get('Cookie')?.match(/(?:^|;\s*)(potion_player=[a-f0-9-]{36})(?:;|$)/)?.[1];
    if(player)headers.set('Cookie',player);

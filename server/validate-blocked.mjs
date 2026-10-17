@@ -14,11 +14,13 @@ export function validateRun(board,events){
    if(!Array.isArray(event.drops)||!event.drops.length||event.drops.length>shelf.length)throw Error('Invalid parallel draw');
    const slots=new Set([...pending.values()]),batchIds=new Set(),unresolved=[];
    for(const drop of event.drops){
+    if(!Number.isInteger(drop.slot)||drop.slot<0||drop.slot>=shelf.length||!Number.isInteger(drop.gem))throw Error('Invalid floor reservation');
     const bottle=shelf[drop.slot],clientGem=original.get(drop.gem);
-    if(!bottle||slots.has(drop.slot)||claimed.has(drop.gem)||batchIds.has(drop.gem)||!clientGem||clientGem.color!==bottle.color)throw Error('Invalid floor reservation');
-    slots.add(drop.slot);batchIds.add(drop.gem);unresolved.push({...drop,color:bottle.color});
+    if(!bottle||slots.has(drop.slot)||claimed.has(drop.gem)||batchIds.has(drop.gem)||!clientGem||clientGem.color!==PotionRules.color(bottle))throw Error('Invalid floor reservation');
+    slots.add(drop.slot);batchIds.add(drop.gem);unresolved.push({...drop,color:PotionRules.color(bottle)});
    }
-   PotionScore.burst(score,pending.size+event.drops.length);
+   PotionScore.burst(score,event.drops.length);
+   for(const drop of event.drops)shelf[drop.slot].combo=Math.max(shelf[drop.slot].combo||1,score.combo);
    // Numerical drift can change the final contact order of a chaotic tumble.
    // Accept equivalent colors and the causal floor cascade of this same batch;
    // every removal must reach the real floor before its color can be consumed.
@@ -30,7 +32,7 @@ export function validateRun(board,events){
    }
   }else if(event.type==='finish'){
    if(!pending.has(event.gem))throw Error('Unreserved liquid');const slot=pending.get(event.gem),bottle=shelf[slot];pending.delete(event.gem);PotionScore.gem(score);bottle.fill++;
-   if(bottle.fill===bottle.capacity){PotionScore.clear(score,bottle.capacity,bottle.color,board.level);shelf[slot]=null;brewed++;}
+   if(bottle.fill===bottle.capacity){queue.find(t=>t.id===bottle.id).cleared=true;PotionScore.clear(score,bottle.capacity,bottle.color,board.level,bottle.combo);shelf[slot]=null;brewed++;}
   }else throw Error('Invalid action');
  }
  if(world.bodies.size||pending.size||drawn!==board.total||placed!==board.bottleCount||brewed!==board.bottleCount)throw Error('Incomplete run');

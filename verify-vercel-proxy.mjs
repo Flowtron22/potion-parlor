@@ -7,6 +7,7 @@ const response=await proxy(request,'runs');assert.equal(response.status,200);ass
 assert.equal((await proxy(new Request('https://game.vercel.app/api/runs',{method:'POST',headers:{Origin:'https://elsewhere.example'},body:'{}'}),'runs')).status,403);
 assert.equal((await proxy(new Request('http://localhost:3000/api/runs',{method:'POST',headers:{Host:'game.vercel.app','X-Forwarded-Proto':'https',Origin:'https://game.vercel.app'},body:'{}'}),'runs')).status,200);
 await proxy(new Request('https://game.vercel.app/api/leaderboard?level=13&unused=private'),'leaderboard');assert.equal(forwarded.url,'https://backend.example/api/leaderboard?level=13');
+await proxy(new Request('https://game.vercel.app/api/leaderboard?daily=1&unused=private'),'leaderboard');assert.equal(forwarded.url,'https://backend.example/api/leaderboard?level=1&daily=1');
 const unavailable=createBackendProxy({fetcher:async()=>new Response('<html>Unavailable</html>',{headers:{'Content-Type':'text/html'}})});assert.equal((await unavailable(new Request('https://game.vercel.app/api/leaderboard'),'leaderboard')).status,503);
 const looping=createBackendProxy({backend:'https://game.vercel.app'});assert.equal((await looping(new Request('https://game.vercel.app/api/runs'),'runs')).status,503);
 console.log('PASS: Vercel proxy preserves anonymous game identity, excludes unrelated credentials, rejects foreign origins, bounds backend routes and handles unavailable service.');

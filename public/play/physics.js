@@ -4,14 +4,16 @@
 class GemPhysics {
  constructor(){
   this.engine=Matter.Engine.create({enableSleeping:true,positionIterations:8,velocityIterations:6});this.engine.gravity.y=.78;this.bodies=new Map();this.impacts=[];this.accumulator=0;this.lastTime=0;this.drag=null;this.impactClock=0;
-  const wall={isStatic:true,friction:.35,restitution:.12};this.floor=Matter.Bodies.rectangle(180,258,340,26,wall);Matter.Composite.add(this.engine.world,[Matter.Bodies.rectangle(15,130,22,280,wall),Matter.Bodies.rectangle(345,130,22,280,wall),this.floor,Matter.Bodies.rectangle(180,3,340,24,wall)]);this.quietSteps=0;this.settled=false;
+  // Stable IDs keep collision-pair order independent of previous levels/worlds.
+  const wall={isStatic:true,friction:.35,restitution:.12};this.floor=Matter.Bodies.rectangle(180,258,340,26,{...wall,id:1});Matter.Composite.add(this.engine.world,[Matter.Bodies.rectangle(15,130,22,280,{...wall,id:2}),Matter.Bodies.rectangle(345,130,22,280,{...wall,id:3}),this.floor,Matter.Bodies.rectangle(180,3,340,24,{...wall,id:4})]);this.quietSteps=0;this.settled=false;
   Matter.Events.on(this.engine,'collisionStart',event=>{for(const pair of event.pairs){const a=pair.bodyA,b=pair.bodyB,speed=Math.hypot(a.velocity.x-b.velocity.x,a.velocity.y-b.velocity.y);if(speed<.8)continue;const p=pair.collision.supports[0]||a.position;this.impacts.push({x:p.x,y:p.y,strength:Math.min(3,speed),life:1,color:a.plugin.gem?.color??b.plugin.gem?.color??2});for(const body of [a,b])if(body.plugin.gem)body.plugin.gem.impact=Math.min(.07,speed*.008);}});
  }
  makeBody(d,col){
   const r=d.drawRadius,ry=r*d.aspect,n=[20,4,6,10,20,3][d.shape],points=[];
   for(let i=0;i<n;i++){const a=i/n*Math.PI*2-Math.PI/2;let x=Math.cos(a)*r,y=Math.sin(a)*ry;if(d.shape===4)x*=.76+.24*y/ry;points.push({x,y});}
-  const body=Matter.Bodies.fromVertices(d.x??55+col*50,d.y??d.targetY,[points],{density:.0017,friction:d.shape===0?.14:.32,frictionStatic:.52,frictionAir:.013,restitution:d.shape===0?.23:.13,sleepThreshold:55,plugin:{gem:d}},true);
-  body.plugin.gem=d;Matter.Body.setAngle(body,d.angle??Math.sin(d.seed)*.08);Matter.Body.setVelocity(body,{x:d.vx||0,y:d.vy||0});Matter.Body.setAngularVelocity(body,d.angularVelocity||0);if(d.sleeping)Matter.Sleeping.set(body,true);return body;
+  const heavy=d.material==='heavy';
+  const body=Matter.Bodies.fromVertices(d.x??55+col*50,d.y??d.targetY,[points],{density:heavy?.0044:.0017,friction:heavy?.4:d.shape===0?.14:.32,frictionStatic:heavy?.7:.52,frictionAir:.013,restitution:heavy?.06:d.shape===0?.23:.13,sleepThreshold:55,plugin:{gem:d}},true);
+  body.id=100+d.id;body.plugin.gem=d;Matter.Body.setAngle(body,d.angle??Math.sin(d.seed)*.08);Matter.Body.setVelocity(body,{x:d.vx||0,y:d.vy||0});Matter.Body.setAngularVelocity(body,d.angularVelocity||0);if(d.sleeping)Matter.Sleeping.set(body,true);return body;
  }
  reset(columns){
   this.release();for(const body of this.bodies.values())Matter.Composite.remove(this.engine.world,body);this.bodies.clear();Matter.Engine.clear(this.engine);this.impacts=[];this.accumulator=0;this.lastTime=0;this.quietSteps=0;this.settled=false;

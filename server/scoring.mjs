@@ -1,11 +1,12 @@
-// Shared, deterministic scoring. No wall-clock pressure or idle-time penalty.
+// Deterministic cascades: thinking time never breaks a chain; choosing a flask does.
 export const PotionScore={
- fresh:()=>({score:0,combo:1,streak:0,placed:0,lastColor:-1,best:1,finished:false}),
- place(s){s.placed++;},
- burst(s,count){if(count<2)return;s.combo=Math.min(8,Math.max(count,s.combo+count-1));s.best=Math.max(s.best,s.combo);},
- gem(s){s.score+=100*s.combo;},
- clear(s,capacity,color,level){const cascade=s.placed===0&&s.streak>0;s.streak=s.lastColor===color?1:s.streak+1;s.combo=Math.min(8,Math.max(s.combo,1+Math.floor(s.streak/2)+(cascade?1:0)));s.best=Math.max(s.best,s.combo);const variety=s.lastColor!==-1&&s.lastColor!==color?1.25:1;s.score+=Math.round((200+capacity*75)*s.combo*variety*(1+Math.min(level-1,29)*.04));s.lastColor=color;s.placed=0;},
- breakChain(s){s.streak=0;s.combo=1;s.placed=0;s.lastColor=-1;},
- finish(s,level){if(s.finished)return;s.finished=true;s.score+=1000+level*100+s.best*200;}
+ fresh:()=>({score:0,combo:1,wave:0,placed:0,lastColor:-1,best:1,clears:0,finished:false}),
+ place(s){s.placed++;s.wave=0;s.combo=1;},
+ burst(s,count){s.wave++;s.combo=Math.min(8,s.wave+count-1);s.best=Math.max(s.best,s.combo);s.score+=100*count*s.combo;},
+ gem(){},
+ clear(s,capacity,color,level,multiplier=s.combo){s.clears++;s.score+=Math.round((200+capacity*75)*multiplier*(1+Math.min(level-1,29)*.04));s.lastColor=color;},
+ breakChain(s){s.wave=0;s.combo=1;},
+ finish(s,level){if(s.finished)return;s.finished=true;s.score+=1000+level*100+s.best*200;},
+ medal(s,rescued=false,target=5){return rescued?1:s.best>=target?3:s.best>=Math.max(2,target-1)?2:1;}
 };
 
