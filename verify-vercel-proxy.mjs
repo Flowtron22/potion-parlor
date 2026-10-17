@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {createBackendProxy} from './server/vercel-api.mjs';
+const player='11111111-2222-3333-4444-555555555555';let forwarded;
+const proxy=createBackendProxy({backend:'https://backend.example',fetcher:async(url,options)=>{forwarded={url:String(url),...options};return Response.json({id:'run-ticket'},{headers:{'Set-Cookie':`potion_player=${player}; Path=/; HttpOnly; Secure; SameSite=Lax`}});}});
+const request=new Request('https://game.vercel.app/api/runs',{method:'POST',headers:{Origin:'https://game.vercel.app',Cookie:`private_session=secret; potion_player=${player}; other=secret`,Authorization:'Bearer private'},body:'{"level":1}'});
+const response=await proxy(request,'runs');assert.equal(response.status,200);assert.equal(forwarded.url,'https://backend.example/api/runs');assert.equal(forwarded.headers.get('Cookie'),`potion_player=${player}`);assert.equal(forwarded.headers.get('Authorization'),null);assert.equal(forwarded.headers.get('Origin'),'https://backend.example');assert(response.headers.get('Set-Cookie').includes('HttpOnly'));
+assert.equal((await proxy(new Request('https://game.vercel.app/api/runs',{method:'POST',headers:{Origin:'https://elsewhere.example'},body:'{}'}),'runs')).status,403);
+assert.equal((await proxy(new Request('http://localhost:3000/api/runs',{method:'POST',headers:{Host:'game.vercel.app','X-Forwarded-Proto':'https',Origin:'https://game.vercel.app'},body:'{}'}),'runs')).status,200);
+await proxy(new Request('https://game.vercel.app/api/leaderboard?level=13&unused=private'),'leaderboard');assert.equal(forwarded.url,'https://backend.example/api/leaderboard?level=13');
+const unavailable=createBackendProxy({fetcher:async()=>new Response('<html>Unavailable</html>',{headers:{'Content-Type':'text/html'}})});assert.equal((await unavailable(new Request('https://game.vercel.app/api/leaderboard'),'leaderboard')).status,503);
+const looping=createBackendProxy({backend:'https://game.vercel.app'});assert.equal((await looping(new Request('https://game.vercel.app/api/runs'),'runs')).status,503);
+console.log('PASS: Vercel proxy preserves anonymous game identity, excludes unrelated credentials, rejects foreign origins, bounds backend routes and handles unavailable service.');

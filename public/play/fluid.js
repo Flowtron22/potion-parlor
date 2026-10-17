@@ -1,40 +1,44 @@
 import * as THREE from './vendor/three.module.min.js';
 
-// A bounded surface effect, not a full fluid solver: merged liquid particles,
-// moving highlights, ballistic splashes, and softly deforming reservoir drops.
+// Continuous glossy liquid jets and glossy gem rendering.
+// This is an animated surface effect rather than a full volumetric fluid solver.
 const vertex=`varying vec2 vUv; void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`;
+// Analytic continuous jet: one smooth surface, with no sampled circles.
 const fragment=`
  precision highp float;
  varying vec2 vUv;
- uniform vec2 uSize;
- uniform vec2 uOffset;
+ uniform vec2 uSize,uOffset,uSource,uTarget;
  uniform vec3 uColor;
- uniform vec4 uDrops[48];
- uniform float uTime;
+ uniform float uTime,uProgress,uScale;
+ const float PI=3.14159265;
  void main(){
-   vec2 p=vec2(vUv.x,1.-vUv.y)*uSize+uOffset;
-   float field=0.;vec2 grad=vec2(0.);
-   for(int i=0;i<48;i++){
-     vec2 d=p-uDrops[i].xy;float r=uDrops[i].z;
-     float d2=max(dot(d,d),.5);float rr=r*r;
-     field+=rr/d2;grad+=-2.*rr*d/(d2*d2);
-   }
-   float edge=max(.002,fwidth(field)*1.2);
-   float alpha=smoothstep(1.-edge,1.+edge,field);
-   if(alpha<.01)discard;
-   vec2 g=normalize(-grad+vec2(.00001));
-   float rim=1./max(field,1.);
-   vec3 n=normalize(vec3(g*rim,sqrt(max(.02,1.-rim*rim))));
-   vec3 light=normalize(vec3(-.45,-.7,1.2));
-   float diffuse=max(dot(n,light),0.);
-   float spec=pow(max(dot(n,normalize(light+vec3(0.,0.,1.))),0.),48.);
-   float stripe=pow(max(0.,1.-abs(n.x+.45)*2.4),12.)*.33;
-   float fresnel=pow(1.-n.z,3.);
-   vec3 col=uColor*(.43+.68*diffuse)+vec3(spec*.9+stripe)+uColor*fresnel*.4;
-   col=mix(col,vec3(.85,1.,.96),fresnel*.24);
-   gl_FragColor=vec4(col,alpha*.96);
-   #include <tonemapping_fragment>
-   #include <colorspace_fragment>
+  vec2 p=vec2(vUv.x,1.-vUv.y)*uSize+uOffset;
+  float height=max(1.,uTarget.y-uSource.y);
+  float head=smoothstep(0.,.29,uProgress);
+  float tail=smoothstep(.72,1.,uProgress);
+  float raw=(p.y-uSource.y)/height,q=clamp(raw,tail,head);
+  float bend=q*(2.-q),phase=q*7.-uTime*6.;
+  float wobble=sin(phase)*sin(q*PI)*.65*uScale;
+  float x=mix(uSource.x,uTarget.x,bend)+wobble;
+  float dx=(uTarget.x-uSource.x)*2.*(1.-q)+.65*uScale*(7.*cos(phase)*sin(q*PI)+PI*sin(phase)*cos(q*PI));
+  float slope=dx/height;
+  float side=(p.x-x)/sqrt(1.+slope*slope);
+  float cap=(raw-q)*height;
+  float width=mix(2.1,1.3,q)*uScale;
+  width+=2.2*uScale*exp(-q*24.)*(1.-smoothstep(0.,.22,uProgress));
+  float distanceToSurface=length(vec2(side,cap))-width;
+  float aa=max(.35,fwidth(distanceToSurface));
+  float alpha=1.-smoothstep(-aa,aa,distanceToSurface);
+  if(alpha<.01||head-tail<.002)discard;
+  float across=clamp(side/width,-1.,1.),z=sqrt(max(.001,1.-across*across));
+  float highlight=exp(-pow((across+.38+sin(q*9.-uTime*8.)*.045)*7.,2.));
+  float rim=pow(abs(across),3.);
+  float reflection=.5+.5*sin(q*4.-uTime*4.);
+  vec3 col=uColor*(.46+.53*z)+vec3(.8,.95,1.)*highlight*.62;
+  col+=mix(uColor,vec3(.8,.94,1.),.45)*rim*(.2+reflection*.1);
+  gl_FragColor=vec4(col,alpha*.94);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
  }`;
 
 class LiquidScene {
@@ -51,7 +55,7 @@ class LiquidScene {
    this.geometries=[new THREE.SphereGeometry(1,20,16),new THREE.OctahedronGeometry(1),hex,new THREE.DodecahedronGeometry(1),tear,new THREE.TetrahedronGeometry(1)];this.meshes=new Map();this.materials=new Map();this.textures=new Map();this.splashes=[];this.seen=new WeakSet();this.available=true;
    this.streamGeometry=new THREE.PlaneGeometry(1,1);
    this.streams=Array.from({length:5},()=>{
-     const uniforms={uSize:{value:new THREE.Vector2()},uOffset:{value:new THREE.Vector2()},uTime:{value:0},uColor:{value:new THREE.Color()},uDrops:{value:Array.from({length:48},()=>new THREE.Vector4(-9999,-9999,0,0))}};
+     const uniforms={uSize:{value:new THREE.Vector2()},uOffset:{value:new THREE.Vector2()},uTime:{value:0},uColor:{value:new THREE.Color()},uSource:{value:new THREE.Vector2()},uTarget:{value:new THREE.Vector2()},uProgress:{value:0},uScale:{value:1}};
      const material=new THREE.ShaderMaterial({uniforms,vertexShader:vertex,fragmentShader:fragment,transparent:true,depthWrite:false,extensions:{derivatives:true}}),mesh=new THREE.Mesh(this.streamGeometry,material);
      mesh.position.z=80;mesh.frustumCulled=false;mesh.visible=false;this.scene.add(mesh);return{mesh,uniforms};
    });
@@ -93,28 +97,15 @@ class LiquidScene {
    this.streams.forEach(s=>s.mesh.visible=false);
    for(const [index,e] of effects.entries()){
      const item=this.streams[index];if(!item)break;const {mesh:stream,uniforms}=item;stream.visible=true;
-     const drops=uniforms.uDrops.value;drops.forEach(d=>d.set(-9999,-9999,0,0));let k=0;uniforms.uTime.value=t;
+     uniforms.uTime.value=t;
      const p=Math.min(1,(now-e.start)/e.duration);let target=this.targets[e.slot]||{x:e.to.x*this.scaleX,y:this.height-30};
      const m=motions[e.slot];if(m)target={x:target.x+(target.neck||0)*Math.sin(m.angle),y:target.y+(target.neck||0)*(1-Math.cos(m.angle))+m.lift};
      const source={x:e.from.x*this.scaleX,y:e.from.y*this.scaleY},color=colors[e.color].hex;
      const left=Math.min(source.x,target.x)-42,top=Math.min(source.y,target.y)-42,w=Math.abs(source.x-target.x)+84,h=Math.abs(source.y-target.y)+84;uniforms.uSize.value.set(w,h);uniforms.uOffset.value.set(left,top);stream.scale.set(w,h,1);stream.position.set(left+w/2,this.height-top-h/2,80);
      uniforms.uColor.value.set(color);
-     // The source stretches into a neck, then becomes a continuous wavy jet.
-     if(p<.3)drops[k++].set(source.x,source.y,Math.min(6,e.radius*.35)*this.scaleX*(1-p/.3),0);
-     const end=Math.min(1,p/.32),start=Math.max(0,(p-.68)/.32);
-     for(let j=0;j<32;j++){
-       const q=start+(end-start)*j/31,inv=1-q;
-       const x=inv*inv*source.x+2*inv*q*target.x+q*q*target.x+Math.sin(q*21-t*13)*.65*Math.sin(q*Math.PI);
-       const y=source.y+(target.y-source.y)*q;
-       const radius=(1.8+Math.sin(q*15-t*12)*.08)*(1-q*.18)*Math.sqrt(Math.max(.04,end-start))*this.scaleX;
-       drops[k++].set(x,y,radius,0);
-     }
-     if(p>.32){
-       const splash=(p-.32)/.68;
-       for(let j=0;j<9;j++){const age=(splash+j/9)%1,v=(j-4)*9;drops[k++].set(target.x+v*age,target.y-18*age+22*age*age,(1-age)*1.2*this.scaleX,0);}
-       drops[k++].set(target.x,target.y,1.8*this.scaleX,0);
-       const slot=this.slots[e.slot];if(slot&&!slot.classList.contains('pouring'))slot.classList.add('pouring');
-     }
+     uniforms.uSource.value.set(source.x,source.y);uniforms.uTarget.value.set(target.x,target.y);
+     uniforms.uProgress.value=p;uniforms.uScale.value=this.scaleX;
+
    }
    this.splashes=[];const pouring=new Set(effects.map(e=>e.slot));for(let i=0;i<this.slots.length;i++)this.slots[i].classList.toggle('pouring',pouring.has(i));
    this.renderer.render(this.scene,this.camera);this.renderCount++;this.dirty=false;

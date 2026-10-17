@@ -64,7 +64,7 @@ function renderQueue(){
  const walls=Array.from({length:rows},(_,row)=>Array.from({length:7},(_,x)=>queue.some(t=>t.row===row&&Math.abs(t.x-x)<.6)?'':`<span class="queue-stone" style="left:${x/7*100}%;top:${row*51}px"></span>`).join('')).join('');
  $('queues').innerHTML=walls+`<svg class="queue-links" viewBox="0 0 350 ${rows*51}" preserveAspectRatio="none" aria-hidden="true">${connectors}</svg>`+queue.map(t=>{
   if(t.taken)return '';const open=PotionRules.exposed(queue,t),near=t.blockers.some(id=>{const p=queue.find(a=>a.id===id);return p&&PotionRules.exposed(queue,p);}),known=open||near;
-  return `<button class="queue-flask ${open?'exposed':'blocked'}" data-tile="${t.id}" ${!open||state.over?'disabled':''} style="left:${(t.x+.5)/7*100}%;top:${t.row*51}px" aria-label="${known?COLORS[t.color].name+' flask, capacity '+t.capacity:'Hidden flask'}, ${open?'available':'blocked'}, flask ${t.id+1}">${bottle(t,65,!known)}<span class="tile-capacity">${known?t.capacity:'?'}</span>${open?'':'<span class="tile-lock" aria-hidden="true">⌑</span>'}</button>`;
+  return `<button class="queue-flask ${open?'exposed':'blocked'}" data-tile="${t.id}" ${!open||state.over?'disabled':''} style="left:${(t.x+.5)/7*100}%;top:${t.row*51}px" aria-label="${known?COLORS[t.color].name+' flask, capacity '+t.capacity:'Hidden flask'}, ${open?'available':'blocked'}, flask ${t.id+1}">${known?bottle(t,65):'<span class="concealed-tile" aria-hidden="true"></span>'}${known?`<span class="tile-capacity">${t.capacity}</span>`:''}${open?'':'<span class="tile-lock" aria-hidden="true">⌑</span>'}</button>`;
  }).join('');
 }
 function choose(id){

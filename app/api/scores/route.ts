@@ -1,2 +1,2 @@
-import {submit} from '../../../server/api';
+import {submit} from '../../../server/vercel-api.mjs';
 export const POST=submit;
