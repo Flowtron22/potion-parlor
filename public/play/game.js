@@ -24,19 +24,19 @@ function random(seed){return()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(
 function generate(level){return window.PotionLevels.generate(level);}
 
 const BOTTLE_PATHS=[
- 'M24 10H36V23Q36 26 39 29V65Q39 74 30 74Q21 74 21 65V29Q24 26 24 23Z',
- 'M24 10H36V25C36 31 53 34 53 52C53 68 44 76 30 76C16 76 7 68 7 52C7 34 24 31 24 25Z',
- 'M24 10H36V25L53 65Q57 75 46 75H14Q3 75 7 65L24 25Z',
- 'M23 10H37V25Q49 26 49 36V67Q49 75 41 75H19Q11 75 11 67V36Q11 26 23 25Z',
- 'M25 10H35V23C35 38 49 41 49 57C49 69 41 76 30 76C19 76 11 69 11 57C11 41 25 38 25 23Z',
- 'M22 10H38V22Q47 24 47 34L44 65Q42 75 30 75Q18 75 16 65L13 34Q13 24 22 22Z'];
+ 'M19 10H41V23Q41 26 45 29V65Q45 74 30 74Q15 74 15 65V29Q19 26 19 23Z',
+ 'M19 10H41V25C41 31 54 34 54 52C54 68 44 76 30 76C16 76 6 68 6 52C6 34 19 31 19 25Z',
+ 'M19 10H41V25L54 65Q58 75 46 75H14Q2 75 6 65L19 25Z',
+ 'M18 10H42V25Q51 26 51 36V67Q51 75 41 75H19Q9 75 9 67V36Q9 26 18 25Z',
+ 'M20 10H40V23C40 38 51 41 51 57C51 69 41 76 30 76C19 76 9 69 9 57C9 41 20 38 20 23Z',
+ 'M18 10H42V22Q50 24 50 34L47 65Q45 75 30 75Q15 75 13 65L10 34Q10 24 18 22Z'];
 function liquidLayers(b,clip,y){
  const colors=b.recipe||[b.color],unit=46.44/b.capacity;
  return `<g clip-path="url(#${clip}-volume)"><rect x="4" y="0" width="52" height="82" fill="${COLORS[colors[0]].hex}"/>${b.recipe?colors.map((color,i)=>`<rect x="4" y="${70.68-(i+1)*unit}" width="52" height="${unit+.5}" fill="${COLORS[color].hex}"/>`).join(''):''}</g>`;
 }
 function bottle(b,fill=65,hidden=false){
- const c=COLORS[PotionRules.color(b)],clip='bottle-'+bottleSerial++,path=BOTTLE_PATHS[b.shape],h=40+b.capacity*5,w=[40,42,40,35,32,37][b.shape]*(.78+b.capacity*.06),y=75-fill*.54;
- return `<svg class="bottle shape-${b.shape}" viewBox="0 0 60 82" preserveAspectRatio="none" aria-hidden="true" data-fill="${fill}" data-capacity="${b.capacity}" style="--potion:${c.hex};--bw:${w}px;--bh:${h}px"><defs><clipPath id="${clip}"><path d="${path}"/></clipPath><clipPath id="${clip}-volume"><path class="liquid-body" d="M4 ${y}H56V82H4Z"/></clipPath><linearGradient id="${clip}-shine"><stop stop-color="#fff" stop-opacity=".3"/><stop offset=".3" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#fff" stop-opacity=".12"/></linearGradient></defs><path d="${path}" fill="#bbebdc0b"/>${hidden?'':`<g clip-path="url(#${clip})" class="potion-fill">${liquidLayers(b,clip,y)}<path class="meniscus" d="M4 ${y}H56" fill="none" stroke="#ecfff5aa" stroke-width=".8"/><circle class="bubble" cx="29" cy="65" r="1.3" fill="#ffffff88"/></g>`}<path d="${path}" fill="url(#${clip}-shine)" stroke="#d0f0ddaa" stroke-width="1.5"/><path d="M26 15V25M18 44V59" fill="none" stroke="#ffffff66" stroke-width="2.3" stroke-linecap="round"/><rect class="cork" x="22" y="3" width="16" height="8" rx="2" fill="#c5a36b"/><path class="cork" d="M24 4H36" stroke="#eed399"/><text x="30" y="56" text-anchor="middle" fill="${hidden?'#8da897':'#fff'}" font-size="${hidden?19:15}" font-family="Georgia">${hidden?'?':c.symbol}</text></svg>`;
+ const c=COLORS[PotionRules.color(b)],clip='bottle-'+bottleSerial++,path=BOTTLE_PATHS[b.shape],h=40+b.capacity*5,w=[48,51,49,46,45,48][b.shape]*(.78+b.capacity*.06),y=75-fill*.54;
+ return `<svg class="bottle shape-${b.shape}" viewBox="0 0 60 82" preserveAspectRatio="none" aria-hidden="true" data-fill="${fill}" data-capacity="${b.capacity}" data-mouth-y="17" style="--potion:${c.hex};--bw:${w}px;--bh:${h}px"><defs><clipPath id="${clip}"><path d="${path}"/></clipPath><clipPath id="${clip}-volume"><path class="liquid-body" d="M4 ${y}H56V82H4Z"/></clipPath><linearGradient id="${clip}-shine"><stop stop-color="#fff" stop-opacity=".3"/><stop offset=".3" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#fff" stop-opacity=".12"/></linearGradient></defs><path d="${path}" fill="#bbebdc0b"/>${hidden?'':`<g clip-path="url(#${clip})" class="potion-fill">${liquidLayers(b,clip,y)}<path class="meniscus" d="M4 ${y}H56" fill="none" stroke="#ecfff5aa" stroke-width=".8"/><circle class="bubble" cx="29" cy="65" r="1.3" fill="#ffffff88"/></g>`}<path d="${path}" fill="url(#${clip}-shine)" stroke="#d0f0ddaa" stroke-width="1.5"/><path d="M23 15V24M18 44V59" fill="none" stroke="#ffffff66" stroke-width="2.3" stroke-linecap="round"/><path d="M18 11H42M19 14H41" fill="none" stroke="#d0f0ddaa" stroke-width="1.5" stroke-linecap="round"/><rect class="cork" x="16" y="3" width="28" height="8" rx="2" fill="#c5a36b"/><path class="cork" d="M19 4H41" stroke="#eed399"/><text x="30" y="56" text-anchor="middle" fill="${hidden?'#8da897':'#fff'}" font-size="${hidden?19:15}" font-family="Georgia">${hidden?'?':c.symbol}</text></svg>`;
 }
 function recipeMarks(b){return b.recipe?'<span class="recipe-bands" aria-hidden="true">'+b.recipe.map((color,i)=>`<i class="${i<(b.fill||0)?'done':i===(b.fill||0)?'next':''}" style="--ingredient:${COLORS[color].hex}">${COLORS[color].symbol}</i>`).join('')+'</span>':'';}
 const brewName=n=>['BREW','BREW','DOUBLE BUBBLE','TRIPLE TROUBLE','BREWSTORM','CAULDRON CHAOS','ARCANE OVERLOAD','POTION PANDEMONIUM','MAGNUM OPUS'][Math.min(8,n)]||'BREW';
