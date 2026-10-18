@@ -1,7 +1,7 @@
 'use strict';
 const COLORS=[{name:'Rose',hex:'#f17b91',symbol:'♡'},{name:'Amber',hex:'#efb74e',symbol:'☀'},{name:'Mint',hex:'#7dcfa4',symbol:'✿'},{name:'Azure',hex:'#69c4e5',symbol:'☾'},{name:'Lilac',hex:'#b89ae6',symbol:'✧'},{name:'Peach',hex:'#ef9f72',symbol:'◇'}];
 const $=id=>document.getElementById(id),canvas=$('game'),ctx=canvas.getContext('2d');
-let dailyMode=false,runDay="",spellMode=null,spellUses=0,helpUsed=false,spellWasBlocked=false,spellUIKey='';
+let dailyMode=false,runDay="",remixedRun=false,spellMode=null,spellUses=0,helpUsed=false,spellWasBlocked=false,spellUIKey='';
 let runLog=[],ranked=true,runTicket=null,runSerial=0,rankConnection='Connecting';
 let state,history=[],effects=[],busy=false,lastTick=0,nextDrawAt=0,time=0,audio,sound=false,modalMode='win',bottleSerial=0,physics=null;
 const bottleMotion=Array.from({length:5},()=>({angle:0,velocity:0,lift:0}));let motionTime=0;
@@ -10,16 +10,16 @@ let savedLevel=1;try{savedLevel=Math.max(1,Math.min(30,Number(localStorage.getIt
 const shuffle=(a,rng=Math.random)=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;};
 const levelCache=new Map();
 let levelWorker=null,loadId=0;
-async function loadLevel(level){
- const id=++loadId;
- if(levelCache.has(level)){document.documentElement.classList.remove('loading');document.querySelector('.app').setAttribute('aria-busy','false');newGame(level,JSON.parse(levelCache.get(level)));return;}
- document.documentElement.classList.add('loading');document.querySelector('.app').setAttribute('aria-busy','true');$('restart').disabled=true;$('shake').disabled=true;
+function makeFreshBoard(board){return new Promise((resolve,reject)=>{const worker=new Worker('remix-worker.js?v=4');const timer=setTimeout(()=>{worker.terminate();reject(Error('Shuffle took too long. Tap restart to retry.'));},15000);worker.onmessage=event=>{clearTimeout(timer);worker.terminate();event.data.error?reject(Error(event.data.error)):resolve(event.data.board);};worker.onerror=()=>{clearTimeout(timer);worker.terminate();reject(Error('Shuffle unavailable. Tap restart to retry.'));};worker.postMessage(board);});}
+async function loadLevel(level,remixed=false){
+ const id=++loadId;document.documentElement.classList.add('loading');document.querySelector('.app').setAttribute('aria-busy','true');$('restart').disabled=true;$('shake').disabled=true;
  try{
-  const response=await fetch('boards/'+level+'.json');if(!response.ok)throw Error('Board unavailable');const data=await response.json();if(id!==loadId)return;
-  levelCache.set(level,JSON.stringify(data));if(levelCache.size>3)levelCache.delete(levelCache.keys().next().value);newGame(level,data);
- }catch{if(id!==loadId)return;rankConnection='Offline';$('rankMode').textContent='Tap ↻ to retry';$('restart').disabled=false;$('restart').onclick=()=>loadLevel(level);}
+  let data;if(levelCache.has(level))data=JSON.parse(levelCache.get(level));else{const response=await fetch('boards/'+level+'.json');if(!response.ok)throw Error('Board unavailable');data=await response.json();levelCache.set(level,JSON.stringify(data));if(levelCache.size>3)levelCache.delete(levelCache.keys().next().value);}
+  if(remixed)data=await makeFreshBoard(data);if(id!==loadId)return;newGame(level,data,remixed);
+ }catch(error){if(id!==loadId)return;$('rankMode').textContent='Tap ↻ to retry';$('restart').disabled=false;$('restart').onclick=()=>loadLevel(level,remixed);}
  finally{if(id===loadId){document.documentElement.classList.remove('loading');document.querySelector('.app').setAttribute('aria-busy','false');}}
 }
+function restartGame(){if(!document.documentElement?.classList.contains('loading'))loadLevel(state.level,true);}
 function random(seed){return()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
 function generate(level){return window.PotionLevels.generate(level);}
 
@@ -42,7 +42,7 @@ function recipeMarks(b){return b.recipe?'<span class="recipe-bands" aria-hidden=
 const brewName=n=>['BREW','BREW','DOUBLE BUBBLE','TRIPLE TROUBLE','BREWSTORM','CAULDRON CHAOS','ARCANE OVERLOAD','POTION PANDEMONIUM','MAGNUM OPUS'][Math.min(8,n)]||'BREW';
 function render(){
  if($('daily')){$('daily').classList.toggle('selected',dailyMode);$('daily').textContent=dailyMode?'Journey':'Daily';}
- if($('score')){$('score').textContent=(state.scoring?.score||0).toLocaleString();$('combo').textContent=state.scoring?.combo>1?brewName(state.scoring.combo)+' ×'+state.scoring.combo:'×1';$('combo').classList.toggle('combo-live',state.scoring?.combo>1);$('rankMode').textContent=ranked?rankConnection:helpUsed?'Spell-assisted':'Practice';}$('level').textContent=(dailyMode?'Daily · ':'')+String(state.level).padStart(2,'0');if($('medals')){let medal=0;try{medal=Number(localStorage.getItem('potion-medal-'+state.level))||0;}catch{}$('medals').textContent=medal?'✦'.repeat(medal):'';}$('count').textContent=`${state.brewed} / ${state.bottleCount}`;$('progress').style.width=state.brewed/state.bottleCount*100+'%';$('gems').textContent=state.columns.reduce((n,c)=>n+c.length,0)+effects.length+(state.essence?.length||0);
+ if($('score')){$('score').textContent=(state.scoring?.score||0).toLocaleString();$('combo').textContent='×'+(state.scoring?.combo||1);$('combo').classList.toggle('combo-live',state.scoring?.combo>1);$('rankMode').textContent=ranked?rankConnection:remixedRun?'Shuffled':helpUsed?'Spell-assisted':'Practice';}$('level').textContent=(dailyMode?'Daily · ':'')+String(state.level).padStart(2,'0');if($('medals')){let medal=0;try{medal=Number(localStorage.getItem('potion-medal-'+state.level))||0;}catch{}$('medals').textContent=medal?'✦'.repeat(medal):'';}$('count').textContent=`${state.brewed} / ${state.bottleCount}`;$('progress').style.width=state.brewed/state.bottleCount*100+'%';$('gems').textContent=state.columns.reduce((n,c)=>n+c.length,0)+effects.length+(state.essence?.length||0);
  $('undo').disabled=!history.length||busy;$('restart').disabled=false;$('shake').disabled=false;viewDirty=true;
  if(!$('rack').children)return;
  let structural=false;
@@ -58,20 +58,21 @@ function render(){
 }
 function snapshot(){return JSON.stringify({logLength:runLog.length,state,effects:effects.map(e=>({...e,start:0})),physics:{settled:physics?.settled||false,quietSteps:physics?.quietSteps||0}});}
 function resetPhysics(){if(state.columns.flat().some(d=>!Number.isFinite(d.drawRadius)||!Number.isFinite(d.y)))layoutGems(state.columns);if(window.GemPhysics){physics??=new window.GemPhysics();physics.reset(state.columns);}for(const m of bottleMotion){m.angle=0;m.velocity=0;m.lift=0;}for(let i=0;i<slotSVGs.length;i++)if(slotSVGs[i]){slotSVGs[i].style.transform='';slotNodes[i].style.setProperty('--slosh','0deg');}}
-function newGame(level=1,prepared){
+function newGame(level=1,prepared,remixed=false){
  $('scoreFlash')?.getAnimations?.().forEach(a=>a.cancel());if($('scoreFlash'))$('scoreFlash').textContent='';
- window.potionFluid?.reset();state=prepared||generate(level);state.essence=[];spellMode=null;spellUses=0;helpUsed=false;state.scoring=PotionScore.fresh();
- runLog=[];ranked=true;runTicket=null;rankConnection='Connecting';const serial=++runSerial;
- window.PotionOnline?.start(level,dailyMode).then(ticket=>{if(serial!==runSerial)return;runTicket=ticket;rankConnection=ticket?'Ranked':'Offline';render();});
- runDay=PotionChallenge.day();history=[];effects=[];busy=false;lastTick=performance.now();nextDrawAt=0;resetPhysics();$('modal').classList.add('hidden');$('restart').onclick=()=>loadLevel(state.level);render();
+ window.potionFluid?.reset();state=prepared||generate(level);state.essence=[];spellMode=null;spellUses=0;helpUsed=remixed;remixedRun=remixed;state.scoring=PotionScore.fresh();
+ runLog=remixed?[{type:'remix'}]:[];ranked=!remixed;runTicket=null;rankConnection='Connecting';const serial=++runSerial;
+ if(!remixed)window.PotionOnline?.start(level,dailyMode).then(ticket=>{if(serial!==runSerial)return;runTicket=ticket;rankConnection=ticket?'Ranked':'Offline';render();});
+ runDay=PotionChallenge.day();history=[];effects=[];busy=false;lastTick=performance.now();nextDrawAt=0;resetPhysics();$('modal').classList.add('hidden');$('restart').onclick=restartGame;render();
 }
 function renderSpells(){
  const wallet=globalThis.PotionTitles?.status?.(),selecting=!!spellMode,waiting=busy||effects.length>0||!physics?.settled,done=state.brewed===state.bottleCount;
  const key=[state.level,selecting,waiting,done,spellUses,history.length,wallet?.mana,wallet?.free,(state.essence||[]).map(g=>g.color).join(',')].join('|');if(key===spellUIKey)return;spellUIKey=key;
- for(const type of ['dispel','sweep']){const button=$(type);if(!button)continue;const price=globalThis.PotionMastery?.prices[type]||Infinity;button.disabled=!wallet||waiting||done||spellUses>=2||selecting||(type==='dispel'&&wallet.free>0?false:wallet.mana<price);button.title=`${2-spellUses} spells left this run. Dissolved gems become potion essence. Using a spell makes this an assisted run.`;}
+ for(const type of ['dispel','sweep','shuffle']){const button=$(type);if(!button)continue;const price=globalThis.PotionMastery?.prices[type]||Infinity;button.disabled=!wallet||waiting||done||spellUses>=2||selecting||(type==='dispel'&&wallet.free>0?false:wallet.mana<price);button.title=`${2-spellUses} spells left this run`;}
  $('undo').disabled=!history.length||busy||selecting;
  $('spellPrompt')?.classList.toggle('hidden',!selecting);canvas.classList.toggle('spell-targeting',selecting);
  const bank=$('essenceBank');if(bank){const counts=COLORS.map((c,i)=>(state.essence||[]).filter(g=>g.color===i).length);bank.classList.toggle('hidden',!counts.some(Boolean));bank.innerHTML=counts.map((n,i)=>n?`<span style="--seal:${COLORS[i].hex}" title="${COLORS[i].name} essence">${COLORS[i].symbol} ${n}</span>`:'').join('');}
+ const shuffleButton=$('modalShuffle');if(shuffleButton)shuffleButton.disabled=waiting||done||spellUses>=2||!wallet||wallet.mana<15||!state.columns.flat().length;
  const rescue=$('rescueSpells');if(rescue){rescue.disabled=waiting||spellUses>=2||!wallet||(!wallet.free&&wallet.mana<35);rescue.textContent=spellUses>=2?'Two spells used':wallet&&!wallet.free&&wallet.mana<35?'Need 35 Mana for a spell':'Try a spell';}
 }
 function beginSpell(type){
@@ -108,7 +109,7 @@ function choose(id){
  runLog.push({type:'place',tile:id});PotionScore.place(state.scoring);nextDrawAt=performance.now()+280;bottleMotion[slot].velocity=(b.shape%2?1:-1)*.85;bottleMotion[slot].lift=-7;tone(330+b.color*40,.06);render();
 }
 function tick(now){
- if(state.over||spellMode||now<nextDrawAt||now-lastTick<110||!physics?.settled)return;lastTick=now;
+ if(document.documentElement?.classList.contains('loading')||state.over||spellMode||now<nextDrawAt||now-lastTick<110||!physics?.settled)return;lastTick=now;
  const drops=globalThis.PotionSpells?PotionSpells.plan(state,physics.bottom(),effects):PotionRules.plan(state.shelf,physics.bottom(),effects);
  if(drops.length){
   const concurrent=drops.length;runLog.push({type:'draw',drops});PotionScore.burst(state.scoring,concurrent);
@@ -151,9 +152,9 @@ function draw(now){ const frameStart=window.frameMeter?.begin(now);
  const completed=[];for(const e of effects){const p=Math.min(1,(now-e.start)/e.duration);if(!window.potionFluid?.available){ctx.save();ctx.strokeStyle=COLORS[e.color].hex;ctx.lineWidth=2;ctx.lineCap='round';ctx.beginPath();for(let j=0;j<=20;j++){const q=Math.max(0,p-.4)+j/20*Math.min(p,.4),inv=1-q,x=inv*inv*e.from.x+(2*inv*q+q*q)*e.to.x,y=e.from.y+(e.to.y-e.from.y)*q;j?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.stroke();ctx.restore();}if(p>=1)completed.push(e);}
  window.potionFluid?.update(now,state.columns,effects,COLORS,physicsChanged||motionActive,bottleMotion);for(const e of completed){effects.splice(effects.indexOf(e),1);completePour(e);}if($('modal').classList.contains('hidden'))tick(now);finishFrame(now,frameStart);
 }
-function showEnd(won){let resultMedal=0;if(won&&state.scoring){PotionScore.finish(state.scoring,state.level);const medal=PotionScore.medal(state.scoring,!ranked,Math.max(...state.queue.map(t=>t.capacity)));resultMedal=medal;if($('resultMedal'))$('resultMedal').textContent='✦'.repeat(medal);try{const key='potion-medal-'+state.level;localStorage.setItem(key,String(Math.max(medal,Number(localStorage.getItem(key))||0)));}catch{}}else if($('resultMedal'))$('resultMedal').textContent='';render();if($('resultScore')){$('resultScore').textContent=state.scoring.score.toLocaleString();$('submitScore').classList.toggle('hidden',!won||!ranked);$('submitStatus').textContent='';$('postScore').disabled=false;$('postScore').textContent='Submit score';}globalThis.PotionTitles?.finish(won,{level:state.level,medal:resultMedal,combo:state.scoring.best,brewed:state.brewed,daily:dailyMode,day:runDay,rescued:!ranked});renderSpells();modalMode=won?'win':'lose';$('modalTitle').textContent=won?'✧':'↻';$('modalTitle').setAttribute('aria-label',won?'Level completed':'Shelf blocked');$('modalAction').textContent=won?'→':'↶';$('modalAction').setAttribute('aria-label',won?'Next level':'Undo last bottle');$('modal').classList.remove('hidden');$('modalAction').focus();}
+function showEnd(won){let resultMedal=0;if(won&&state.scoring){PotionScore.finish(state.scoring,state.level);const medal=PotionScore.medal(state.scoring,!ranked,Math.max(...state.queue.map(t=>t.capacity)));resultMedal=medal;if($('resultMedal'))$('resultMedal').textContent='✦'.repeat(medal);try{const key='potion-medal-'+state.level;localStorage.setItem(key,String(Math.max(medal,Number(localStorage.getItem(key))||0)));}catch{}}else if($('resultMedal'))$('resultMedal').textContent='';render();if($('resultScore')){$('resultScore').textContent=state.scoring.score.toLocaleString();$('submitScore').classList.toggle('hidden',!won||!ranked);$('submitStatus').textContent='';$('postScore').disabled=false;$('postScore').textContent='Submit score';}globalThis.PotionTitles?.finish(won,{level:state.level,medal:resultMedal,combo:state.scoring.best,brewed:state.brewed,daily:dailyMode,day:runDay,rescued:!ranked});renderSpells();modalMode=won?'win':'lose';$('modalTitle').textContent=won?'✧':'';$('modalTitle').setAttribute('aria-label',won?'Level completed':'Shelf blocked');$('modalRestart').classList.toggle('hidden',won);$('modalShuffle').classList.toggle('hidden',won);$('modalAction').textContent=won?'→':'Undo';$('modalAction').setAttribute('aria-label',won?'Next level':'Undo last bottle');$('modal').classList.remove('hidden');$('modalAction').focus();}
 function undo(){if(spellMode||!history.length)return;window.potionFluid?.reset();const saved=JSON.parse(history.pop());state=saved.state;runLog.length=saved.logLength||0;ranked=false;state.over=false;effects=saved.effects.map(e=>({...e,start:performance.now()}));busy=!!effects.length;lastTick=performance.now();resetPhysics();if(physics&&saved.physics){physics.settled=saved.physics.settled;physics.quietSteps=saved.physics.quietSteps;physics.sync();}$('modal').classList.add('hidden');render();}
-$('queues').addEventListener('click',e=>{const b=e.target.closest('button[data-tile]');if(b&&!b.disabled)choose(Number(b.dataset.tile));});$('restart').onclick=()=>loadLevel(state.level);$('undo').onclick=undo;$('sound').onclick=()=>{sound=!sound;$('sound').textContent=sound?'♫':'♪';$('sound').setAttribute('aria-label',sound?'Mute sound':'Enable sound');tone(660,.1);};$('modalAction').onclick=()=>{if(modalMode==='win')loadLevel(dailyMode?state.level:Math.min(30,state.level+1));else undo();};
+$('queues').addEventListener('click',e=>{const b=e.target.closest('button[data-tile]');if(b&&!b.disabled)choose(Number(b.dataset.tile));});$('restart').onclick=restartGame;$('undo').onclick=undo;$('sound').onclick=()=>{sound=!sound;$('sound').textContent=sound?'♫':'♪';$('sound').setAttribute('aria-label',sound?'Mute sound':'Enable sound');tone(660,.1);};$('modalAction').onclick=()=>{if(modalMode==='win')(dailyMode?restartGame():loadLevel(Math.min(30,state.level+1)));else undo();};
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='z'){e.preventDefault();undo();}});
 // Challenge mode has no gem-drag control: buried colors must fall naturally.
 $('shake').onclick=()=>{if(!physics||state.over)return;history.push(snapshot());ranked=false;if(state.scoring)PotionScore.breakChain(state.scoring);render();physics.nudge();$('undo').disabled=false;document.querySelector('.game').animate([{transform:'rotate(0)'},{transform:'rotate(-.45deg)'},{transform:'rotate(.4deg)'},{transform:'rotate(0)'}],{duration:360,easing:'ease-out'});tone(220,.08);};
@@ -172,3 +173,11 @@ $('cancelSpell')?.addEventListener('click',cancelSpell);
 $('rescueSpells')?.addEventListener('click',()=>beginSpell('dispel'));
 canvas.addEventListener('click',e=>{if(!spellMode)return;const r=canvas.getBoundingClientRect(),point={x:(e.clientX-r.left)/r.width*360,y:(e.clientY-r.top)/r.height*290},hit=Matter.Query.point([...physics.bodies.values()],point).at(-1);if(hit)castSpell(hit.plugin.gem.id);});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&spellMode)cancelSpell();});
+
+function shuffleCurrent(){
+ if(!state||effects.length||!physics?.settled||spellUses>=2||state.brewed===state.bottleCount||!state.columns.flat().length||!globalThis.PotionTitles?.spend('shuffle'))return false;
+ history.push(snapshot());PotionRemix.shuffle(state.columns);spellUses++;helpUsed=true;ranked=false;state.over=false;spellMode=null;runLog.push({type:'spell',spell:'shuffle'});PotionScore.breakChain(state.scoring);$('modal').classList.add('hidden');resetPhysics();flashScore('MIX IT UP!');tone(550,.14);render();return true;
+}
+$('shuffle')?.addEventListener('click',shuffleCurrent);
+$('modalShuffle')?.addEventListener('click',shuffleCurrent);
+$('modalRestart')?.addEventListener('click',restartGame);

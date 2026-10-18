@@ -9,7 +9,7 @@
   $('titleMeter').setAttribute('aria-label',requirement(s));$('titleButton').setAttribute('aria-label',s.rank.name+', '+s.xp+' mastery XP. View title ladder');
   $('masterySummary').textContent=requirement(s);$('manaBalance').textContent=s.mana.toLocaleString();$('freeSpells').textContent=s.free?`${s.free} free`:35+' MP';
   $('masteryStorage').textContent=s.persisted?'Titles and Mana saved on this device.':'Storage unavailable · progress lasts for this session.';
-  $('masteryIncome').textContent=`${s.wins} board wins · ${s.income}+ Mana per first clear · Promotion: bonus Mana + a free Dispel`;
+  $('masteryIncome').textContent=`${s.wins} wins · ${s.income}+ MP / clear`;
   $('titleLadder').replaceChildren(...PotionMastery.ranks.map((rank,i)=>{
    const li=document.createElement('li'),rune=document.createElement('span'),copy=document.createElement('div'),name=document.createElement('strong'),detail=document.createElement('small'),mark=document.createElement('span');
    li.className=i<s.index?'earned':i===s.index?'current':'future';if(i===s.index)li.setAttribute('aria-current','step');
@@ -32,10 +32,12 @@
   finish(won,run){
    const result=won?profile.award(run):profile.consolation(run),s=profile.status();
    $('resultGreeting').textContent=PotionMastery.message(won,s.rank.name,attempt++);
-   $('resultMastery').classList.toggle('promotion',!!result.promoted);
-   $('resultMastery').textContent=result.promoted?`${s.rank.rune} Promoted to ${s.rank.name}!`:
-    result.earned||result.manaEarned?`+${result.earned} XP · +${result.manaEarned} Mana`:won?'Best brew already recorded':'Your title is safe';
-   $('resultMasteryDetail').textContent=(result.promoted?`+${result.earned} XP · +${result.manaEarned} Mana · +1 free Dispel. `:'')+(won?(run.rescued?'Assisted clear counts toward your title. ':'')+requirement(s):'Progress rewards count only new bests. Try magic or another flask order.');
+   $('resultMastery').classList.remove('promotion');
+   $('resultMastery').textContent=result.earned||result.manaEarned?`+${result.earned} XP · +${result.manaEarned} Mana`:'';
+   $('resultMastery').classList.toggle('hidden',!result.earned&&!result.manaEarned);
+   $('resultMasteryDetail').textContent='';
+   $('rankCelebration').classList.toggle('hidden',!result.promoted);
+   if(result.promoted){$('rankUpRune').textContent=s.rank.rune;$('rankUpName').textContent=s.rank.name;}
    $('rescueSpells').classList.toggle('hidden',won);
    render();return result;
   }
