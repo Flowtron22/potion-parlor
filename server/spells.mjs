@@ -1,3 +1,4 @@
+import {GemPhysics} from './physics.mjs';
 import {PotionRules} from './rules.mjs';
 // Removed gems keep their potion value, so a help cannot starve later recipes.
 export const PotionSpells={
@@ -11,7 +12,7 @@ export const PotionSpells={
  shuffle(columns,seed){
   let value=seed>>>0;const rng=()=>{value=(Math.imul(value,1664525)+1013904223)>>>0;return value/4294967296;},gems=columns.flat().sort((a,b)=>a.id-b.id),order=[...gems];
   for(let i=order.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[order[i],order[j]]=[order[j],order[i]];}
-  order.forEach((g,i)=>{g.x=49+(i%7)*43.5+(rng()-.5)*8;g.y=217-Math.floor(i/7)*43-rng()*8;g.angle=(rng()-.5)*.7;g.vx=g.vy=g.angularVelocity=0;g.sleeping=false;g.available=false;for(const key of ['prevX','prevY','prevAngle','renderX','renderY','renderAngle'])delete g[key];});return columns;
+  GemPhysics.arrange(order,rng);return columns;
  },
  plan(state,floor,pending){return PotionRules.plan(state.shelf,[...(state.essence||[]),...floor],pending);}
 };

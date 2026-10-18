@@ -12,13 +12,13 @@ Medals are saved on this device per level. Gold requires a cascade at least as l
 
 Daily starts on one canonical level from 6–30 using the UTC date. Everyone receives the same starting board and continues through the same level sequence. Daily rankings use a date-specific ruleset, separate from journey rankings. They rotate at 00:00 UTC; the 25-board daily selection repeats after 25 days. This is a daily competition, not a promise of a newly generated board every day.
 
-The server verifies completed-parent locks, ordered ingredients, distinct reservations, bottle ownership, finishes and deterministic scores. New scores use survival-v7; old records remain stored under their prior rulesets. Existing pre-update tickets must restart. The physical replay retains equivalent-color tolerance for contact-order drift; this is a casual leaderboard, not an anti-bot system.
+The server verifies completed-parent locks, ordered ingredients, distinct reservations, bottle ownership, finishes and deterministic scores. New scores use survival-v8; old records remain stored under their prior rulesets. Existing pre-update tickets must restart. The physical replay retains equivalent-color tolerance for contact-order drift; this is a casual leaderboard, not an anti-bot system.
 
 Liquid now uses Pavel Dobryakov's MIT-licensed WebGL Fluid Simulation solver, adapted to Three.js render targets. GPU passes advect velocity and dye, compute curl/vorticity, solve pressure with 14 Jacobi iterations, and subtract the pressure gradient. A controlled inlet directs each simultaneous pour; masked fields inside the actual SVG flask silhouettes advect and mix the arriving pigments. The previous CPU particle jet and its reconstructed particle surface have been removed. The SVG fill boundary retains its damped wave response. Like the reference, this is a 2D velocity/dye simulation, not a 3D free-surface water solver. Solver fields are pooled for pours, disposed when bottles leave, prewarmed at startup, and paused after settling. The browser profile reports fluidEngine=pavel-dobryakov. See FLUID.md and public/play/vendor/pavel-fluid/LICENSE for provenance and license. WebGL loss retains the Canvas fallback.
 
 Checks: node verify-blocked.mjs, node verify-cascades.mjs, node verify-liquid.mjs, node verify-vercel-proxy.mjs. With the local Worker on port 4174: node verify-api.mjs. Build native Vercel output with npm run build:vercel, or Worker output with npm run build. Regenerate boards explicitly with node scripts/block-catalog.mjs; builds only copy the checked catalog.
 
-## Difficulty after two warm-up games (survival-v7)
+## Difficulty after two warm-up games (survival-v8)
 
 - Levels 1–2: three colors, three slots, three opening choices, short single-color bottles and single-parent locks.
 - Levels 3–4: four colors, two opening branches and two-parent locks. Three slots leave room to recover.
@@ -28,4 +28,6 @@ Checks: node verify-blocked.mjs, node verify-cascades.mjs, node verify-liquid.mj
 
 The builder targets blind-play clear rates of 88%, 55%, 38%, 28%, 20% and 10% across its difficulty bands. These are generation targets, not promises about player success. Every board has a physically verified winning route. The v7 ruleset separates changed layouts from older score tickets and retains old scores in storage. Titles, XP, wins and Mana are preserved.
 
-Independent 24-run holdout probes per sampled board: warm-up levels 1/2 cleared 94%; levels 3/4/6/8 cleared 51%; levels 12/16/20/30 cleared 13%. These are blind automated choices, not human win-rate estimates. All 30 canonical winning routes and all 30 shuffled restart routes pass physical validation.
+Independent 24-run holdout probes per sampled board: warm-up levels 1/2 cleared 88%; levels 3/4/6/8 cleared 49%; levels 12/16/20/30 cleared 21%. These are blind automated choices, not human win-rate estimates. All 30 canonical winning routes and all 30 shuffled restart routes pass physical validation.
+
+The cauldron now has a narrow opening, broad shoulders and a curved lower bowl. Segmented physical walls match the visible outline; only settled gems contacting the lower arc are available. Canonical layouts use 28 large gems and retain 6–8 initial lower-wall contacts. All 30 winning routes, 30 remixed routes and 840 sequential removals are verified. The v8 score ruleset isolates these changed physical layouts. Titles, XP and Mana remain intact.

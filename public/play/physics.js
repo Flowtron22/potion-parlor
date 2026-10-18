@@ -2,10 +2,18 @@
 // The physics world owns both motion and eligibility: only floor contacts can pour.
 // No Matter bodies are stored in game state, so undo can restore clean JSON snapshots.
 class GemPhysics {
+ static outline=[[70,28],[58,49],[44,75],[32,105],[26,137],[30,170],[43,201],[64,226],[92,243],[125,253],[162,257],[198,257],[235,253],[268,243],[296,226],[317,201],[330,170],[334,137],[328,105],[316,75],[302,49],[290,28]];
+ static arrange(gems,random=()=>.5){
+  const spots=[];for(const [count,y] of [[5,213],[6,172],[7,131],[6,90],[5,49]])for(let col=0;col<count;col++)spots.push({x:180+(col-(count-1)/2)*44,y});
+  gems.forEach((g,i)=>{const p=spots[i%spots.length];g.x=p.x+(random()-.5)*3;g.y=p.y+(random()-.5)*3;g.angle=(random()-.5)*.5;g.vx=g.vy=g.angularVelocity=0;g.sleeping=false;g.available=false;for(const key of ['prevX','prevY','prevAngle','renderX','renderY','renderAngle'])delete g[key];});return gems;
+ }
+
  constructor(){
   this.engine=Matter.Engine.create({enableSleeping:true,positionIterations:8,velocityIterations:6});this.engine.gravity.y=.78;this.bodies=new Map();this.impacts=[];this.accumulator=0;this.lastTime=0;this.drag=null;this.impactClock=0;
   // Stable IDs keep collision-pair order independent of previous levels/worlds.
-  const wall={isStatic:true,friction:.35,restitution:.12};this.floor=Matter.Bodies.rectangle(180,258,340,26,{...wall,id:1});Matter.Composite.add(this.engine.world,[Matter.Bodies.rectangle(15,130,22,280,{...wall,id:2}),Matter.Bodies.rectangle(345,130,22,280,{...wall,id:3}),this.floor,Matter.Bodies.rectangle(180,3,340,24,{...wall,id:4})]);this.quietSteps=0;this.settled=false;
+  const wall={isStatic:true,friction:.24,restitution:.12};this.floorParts=[];this.walls=[];
+  for(let i=0;i<GemPhysics.outline.length-1;i++){const a=GemPhysics.outline[i],b=GemPhysics.outline[i+1],dx=b[0]-a[0],dy=b[1]-a[1],len=Math.hypot(dx,dy);const part=Matter.Bodies.rectangle((a[0]+b[0])/2-dy/len*7,(a[1]+b[1])/2+dx/len*7,len+2,14,{...wall,id:i+1,angle:Math.atan2(dy,dx)});this.walls.push(part);if((a[1]+b[1])/2>=185)this.floorParts.push(part);}
+  this.floor=this.floorParts[Math.floor(this.floorParts.length/2)];Matter.Composite.add(this.engine.world,[...this.walls,Matter.Bodies.rectangle(180,16,230,24,{...wall,id:40})]);this.quietSteps=0;this.settled=false;
   Matter.Events.on(this.engine,'collisionStart',event=>{for(const pair of event.pairs){const a=pair.bodyA,b=pair.bodyB,speed=Math.hypot(a.velocity.x-b.velocity.x,a.velocity.y-b.velocity.y);if(speed<.8)continue;const p=pair.collision.supports[0]||a.position;this.impacts.push({x:p.x,y:p.y,strength:Math.min(3,speed),life:1,color:a.plugin.gem?.color??b.plugin.gem?.color??2});for(const body of [a,b])if(body.plugin.gem)body.plugin.gem.impact=Math.min(.07,speed*.008);}});
  }
  makeBody(d,col){
@@ -20,7 +28,7 @@ class GemPhysics {
   columns.forEach((column,i)=>column.forEach(d=>{const body=this.makeBody(d,i);this.bodies.set(d.id,body);Matter.Composite.add(this.engine.world,body);}));this.sync();
  }
  sync(){const alpha=this.settled?1:Math.max(0,Math.min(1,this.accumulator/(1000/120)));for(const body of this.bodies.values()){const d=body.plugin.gem;d.x=body.position.x;d.y=body.position.y;d.angle=body.angle;d.renderX=(d.prevX??d.x)+(d.x-(d.prevX??d.x))*alpha;d.renderY=(d.prevY??d.y)+(d.y-(d.prevY??d.y))*alpha;d.renderAngle=(d.prevAngle??d.angle)+(d.angle-(d.prevAngle??d.angle))*alpha;d.vx=body.velocity.x;d.vy=body.velocity.y;d.angularVelocity=body.angularVelocity;d.sleeping=body.isSleeping;d.available=this.settled&&this.canCollect(body);}}
- canCollect(body){return !this.drag&&body.bounds.max.y>=243.8&&Math.abs(body.velocity.y)<.35&&body.speed<.55&&Math.abs(body.angularVelocity)<.04&&!!Matter.Collision.collides(body,this.floor);}
+ canCollect(body){return !this.drag&&Math.abs(body.velocity.y)<.35&&body.speed<.55&&Math.abs(body.angularVelocity)<.04&&this.floorParts.some(part=>!!Matter.Collision.collides(body,part));}
  bottom(color){return [...this.bodies.values()].filter(b=>(color===undefined||b.plugin.gem.color===color)&&this.canCollect(b)).sort((a,b)=>a.position.x-b.position.x||a.plugin.gem.id-b.plugin.gem.id).map(b=>b.plugin.gem);}
  advance(){
   if(this.settled&&!this.drag)return;

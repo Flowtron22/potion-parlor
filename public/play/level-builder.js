@@ -3,10 +3,10 @@
 function random(seed){return()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
 function generate(level,attempt=0){
  if(!attempt&&levelCache.has(level))return JSON.parse(levelCache.get(level));
- const rng=random(9173+level*1231+attempt*7919),colorCount=level<4?4:level<9?5:6,slots=level<4?5:level<13?4:3,total=28+level%5,columns=Array.from({length:7},()=>[]);
+ const rng=random(9173+level*1231+attempt*7919),colorCount=level<4?4:level<9?5:6,slots=level<4?5:level<13?4:3,total=26+level%3,columns=Array.from({length:7},()=>[]);
  for(let id=0;id<total;id++){const col=id%7,row=Math.floor(id/7),shape=Math.floor(rng()*6),radius=23+rng()*5;
   columns[col].push({id,color:Math.floor(rng()*colorCount),shape,radius,drawRadius:radius,aspect:.9+rng()*.2,seed:rng()*10,x:49+col*43.5,y:217-row*43,angle:(rng()-.5)*.2});}
- const world=new window.GemPhysics();world.reset(columns);world.settle();
+ GemPhysics.arrange(columns.flat(),rng);const world=new window.GemPhysics();world.reset(columns);world.settle();
  const initial=JSON.parse(JSON.stringify(columns)),floorCount=world.bottom().length;
  if(floorCount<6||floorCount>8)return generate(level,attempt+1);
  const solution=[];

@@ -7,7 +7,7 @@ const originAllowed=request=>!request.headers.get('Origin')||request.headers.get
 async function body(request){if(Number(request.headers.get('Content-Length')||0)>24000)throw Error('Request too large');const raw=await request.text();if(raw.length>24000)throw Error('Request too large');return JSON.parse(raw);}
 export function createLeaderboardAPI(DB,levels){
  const getRun=(ticket,id)=>DB.prepare('SELECT * FROM runs WHERE id=? AND player=?').bind(String(ticket),id).first();
- function valid(run){return run&&Date.now()-run.created<=86400000&&/^survival-v7(?:-daily-\d{4}-\d{2}-\d{2})?$/.test(run.ruleset);}
+ function valid(run){return run&&Date.now()-run.created<=86400000&&/^survival-v8(?:-daily-\d{4}-\d{2}-\d{2})?$/.test(run.ruleset);}
  async function start(request){
   if(!originAllowed(request))return json({error:'Invalid origin'},403);
   try{

@@ -105,7 +105,7 @@ class LiquidScene {
    const pose=soulPose(p,e.from,e.to,e.gemId),r=e.radius*this.scaleX,scale=Math.max(.001,pose.popScale);
    pop.gem.scale.set(r*(1+pose.squash)*scale,r*(e.aspect||1)*(1-pose.squash)*this.scaleY/this.scaleX*scale,r*.72*scale);
    pop.gem.position.set(e.from.x*this.scaleX,this.height-e.from.y*this.scaleY-pose.squash*r*.45,30);pop.gem.rotation.z=-(e.angle||0);pop.gem.material.uniforms.uPopFade.value=Math.min(1,pose.popScale*2);
-   pop.ring.scale.set(r*4,r*1.6,1);pop.ring.position.set(e.from.x*this.scaleX,this.height-244*this.scaleY,86);pop.ring.material.uniforms.phase.value=Math.min(1,p/POP_END);
+   pop.ring.scale.set(r*4,r*1.6,1);pop.ring.position.set(e.from.x*this.scaleX,this.height-(e.from.y+(e.radius||20)*(e.aspect||1))*this.scaleY,86);pop.ring.material.uniforms.phase.value=Math.min(1,p/POP_END);
   }
   for(const [e,pop]of this.departures)if(!active.has(e)){this.scene.remove(pop.gem,pop.ring);pop.gem.material.dispose();pop.ring.material.dispose();this.departures.delete(e);}
  }

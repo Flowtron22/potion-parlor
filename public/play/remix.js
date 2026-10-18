@@ -1,9 +1,6 @@
 globalThis.PotionRemix={
  shuffle(columns,rng=Math.random){
-  const gems=columns.flat(),positions=gems.map(g=>({x:g.x,y:g.y}));
-  for(let i=positions.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[positions[i],positions[j]]=[positions[j],positions[i]];}
-  // Clear old interpolation/sleep data so the new arrangement visibly tumbles.
-  gems.forEach((g,i)=>{g.x=Math.max(54,Math.min(306,positions[i].x+(rng()-.5)*12));g.y=Math.max(43,Math.min(217,positions[i].y-9-rng()*8));g.angle=(rng()-.5)*.7;g.vx=0;g.vy=0;g.angularVelocity=0;g.sleeping=false;g.available=false;for(const key of ['prevX','prevY','prevAngle','renderX','renderY','renderAngle'])delete g[key];});
+  const gems=columns.flat().sort((a,b)=>a.id-b.id);for(let i=gems.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[gems[i],gems[j]]=[gems[j],gems[i]];}GemPhysics.arrange(gems,rng);
   return columns;
  },
  restart(board,rng=Math.random){
