@@ -1,1 +1,1 @@
-import {redirect} from 'next/navigation'; export default function Home(){redirect('/play/index.html');}
+export default function Home(){return <main><a href="/">Potionpendium</a></main>;}

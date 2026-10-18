@@ -1,6 +1,14 @@
-<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-<path d="M22 19.2727C22 20.779 20.779 22 19.2727 22H14.7273C13.221 22 12 20.779 12 19.2727V12H19.2727C20.779 12 22 13.221 22 14.7273V19.2727Z" fill="#68C4FF"/>
-<path d="M20 2C21.1046 2 22 2.89543 22 4V7C22 8.10457 21.1046 9 20 9H17C15.8954 9 15 8.10457 15 7V4C15 2.89543 15.8954 2 17 2H20Z" fill="#0C79D8"/>
-<path d="M7 15C8.10457 15 9 15.8954 9 17V20C9 21.1046 8.10457 22 7 22H4C2.89543 22 2 21.1046 2 20V17C2 15.8954 2.89543 15 4 15H7Z" fill="#0C79D8"/>
-<path d="M12 12H4.72727C3.22104 12 2 10.779 2 9.27273V4.72727C2 3.22104 3.22104 2 4.72727 2H9.27273C10.779 2 12 3.22104 12 4.72727V12Z" fill="#2E9EFF"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+ <defs>
+  <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#d9f5ff"/><stop offset=".5" stop-color="#93bce7"/><stop offset="1" stop-color="#6883bd"/></linearGradient>
+  <linearGradient id="potion" x1="0" y1="0" x2=".3" y2="1"><stop stop-color="#d46dff"/><stop offset=".5" stop-color="#9a3aeb"/><stop offset="1" stop-color="#512b97"/></linearGradient>
+  <clipPath id="bottle"><path d="M23 18h18v10c0 3 15 7 15 20 0 10-10 13-24 13S8 58 8 48c0-13 15-17 15-20Z"/></clipPath>
+ </defs>
+ <path d="M23 18h18v10c0 3 15 7 15 20 0 10-10 13-24 13S8 58 8 48c0-13 15-17 15-20Z" fill="#213746" stroke="url(#glass)" stroke-width="3" stroke-linejoin="round"/>
+ <g clip-path="url(#bottle)"><path d="M7 43c11-12 28 12 50-2v24H7Z" fill="url(#potion)"/><path d="M9 43c12-10 28 11 46-1" fill="none" stroke="#e49bff" stroke-width="2"/><ellipse cx="20" cy="36" rx="3" ry="7" transform="rotate(39 20 36)" fill="#e7f9ff" opacity=".8"/><circle cx="30" cy="50" r="2" fill="#efbcff"/><circle cx="40" cy="54" r="1.5" fill="#e8a2ff"/><circle cx="23" cy="56" r="1" fill="#e8a2ff"/></g>
+ <rect x="21" y="15" width="22" height="7" rx="3" fill="url(#glass)"/>
+ <path d="M23 6h18l-2 11H25Z" fill="#c78c55" stroke="#f2ca85" stroke-width="1.5"/>
+ <path d="M26 9h12" stroke="#edb978" stroke-width="2" stroke-linecap="round"/>
+ <path d="m49 5 1.6 4.4L55 11l-4.4 1.6L49 17l-1.6-4.4L43 11l4.4-1.6Z" fill="#f7d98a"/>
+ <circle cx="10" cy="27" r="2" fill="#deb4ff"/>
 </svg>
