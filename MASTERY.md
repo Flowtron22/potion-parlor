@@ -1,20 +1,22 @@
-# Personal titles
+# Titles, Mana and spells
 
-Journey and Daily wins now contribute to one local mastery profile (`potion-mastery-v1`). This cosmetic progression never changes competitive scores, puzzle rules, or leaderboard eligibility. Titles are saved on the current browser/device; there is no account or cross-device title sync.
+Titles use permanent Mastery XP. Mana Points (MP) are a separate, spendable wallet; spending never reduces XP. Everything is saved locally under the migrated `potion-mastery-v1` storage key (schema 2). Existing XP and completed-board records are preserved. There is no cross-device title or wallet sync.
 
-| Title | Mastery | Highest level cleared without undo |
-| --- | ---: | ---: |
-| Squire | 0 | — |
-| Apprentice | 200 | 1 |
-| Alchemist | 1,200 | 5 |
-| Wizard | 3,000 | 11 |
-| Archwizard | 6,000 | 16 |
-| Grand Archwizard | 10,000 | 25 |
+| Title | XP | Distinct board wins | Unassisted milestone | Base Mana / first clear |
+| --- | ---: | ---: | --- | ---: |
+| Squire | 0 | 0 | — | 20 |
+| Apprentice | 400 | 4 | — | 24 |
+| Alchemist | 1,400 | 10 | — | 28 |
+| Wizard | 3,600 | 20 | Level 11 | 32 |
+| Archwizard | 7,500 | 35 | Level 16 | 36 |
+| Grand Archwizard | 12,000 | 55 | Level 25 | 40 |
 
-A win earns `100 + 12 × level + 25 × medal + 15 × best cascade`, with 60 extra mastery for a Daily clear. Undo-assisted wins earn half, rounded, and do not satisfy the level milestones. Offline clears still count; mastery is personal, not a verified leaderboard claim.
+Every new clear earns at least 100 XP, including assisted clears. Thus four new wins always unlock Apprentice; high-scoring first wins cannot bypass the four-win requirement. Clear reward: `100 + 5 × level`, plus `10 × medal + 5 × best combo` if unassisted; Daily adds 20 XP. First clear Mana: tier base + `2 × floor(level/5)` + 5 for Daily. Promotions grant `25 + 10 × new tier index` Mana and a free Dispel.
 
-Each Journey board stores only its best mastery reward. Replays award the difference when improved. Daily rewards are keyed to the run's starting UTC date and board; each new day provides another reward. A loss gives no mastery and never removes titles. Existing Journey position, medals and scores are preserved; legacy medals do not retroactively grant mastery.
+New players receive 50 Mana and one free Dispel. Dispel costs 35 Mana (or consumes a free charge first). Chromatic Sweep costs 100 Mana. At most two spells may be cast per run. Canceling or missing a gem costs nothing. Restart and undo never refund the wallet or run's spell count. Mana is capped at 1,500; free charges at 20.
 
-The title button opens all milestones and remaining requirements. Results address the player by title, show earned mastery, and celebrate promotions. The ladder meter reflects both mastery and the next level milestone. Failed browser storage falls back to session memory with an explicit notice.
+Failed attempts award a per-board high-water mark: 3 XP per newly brewed bottle, capped at 60, and one Mana per two bottles, capped at 10. A later win subtracts prior partial rewards from its payout. Repeating a clear does not add wins or Mana; improved medals/combos grant only the XP improvement. Daily progress is keyed to the run's starting UTC date and board. Legacy first clears retain their XP/win credit but cannot be replayed for new Mana payouts.
 
-Verify with `node verify-mastery.mjs`; this covers progression gates, replay farming, daily rewards, improved cascades, undo limits, persistence, unavailable storage, and the real game's result path.
+Spells dissolve gems into stored essence, preserving all potion supply. Essence automatically pours into matching bottles before ordinary floor gems; ordered recipe requirements still apply. Sweep removes only the selected color remaining in the jar, including buried gems. Physical gems fall normally afterward. Spell runs are clearly marked assisted, earn titles and Mana, and cannot submit to the shared competitive leaderboard. Unassisted scoring and puzzle layouts are unchanged. Brew combo announcements now use Double Bubble, Triple Trouble, Brewstorm, Cauldron Chaos, Arcane Overload, Potion Pandemonium and Magnum Opus.
+
+Verify with `node verify-mastery.mjs` and `node verify-blocked.mjs`. These cover economy replay/partial reward protections, migration, spend persistence, the four-win gate, spell limits and cancellation, no undo refunds, essence conservation, a completed spell-assisted board, ranked rejection, all 30 original solutions and ordinary browser/server score parity.

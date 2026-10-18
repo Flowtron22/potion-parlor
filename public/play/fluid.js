@@ -40,7 +40,7 @@ class LiquidScene {
  measure(){
    const parent=document.querySelector('.game').getBoundingClientRect(),board=document.getElementById('game').getBoundingClientRect(),rack=document.getElementById('rack').getBoundingClientRect();
    const width=board.width,height=rack.bottom-board.top,changed=width!==this.width||height!==this.height;this.width=width;this.height=height;this.scaleX=board.width/360;this.scaleY=board.height/290;
-   if(changed){this.root.style.left=(board.left-parent.left-1)+'px';this.root.style.top=(board.top-parent.top-1)+'px';this.root.style.width=width+'px';this.root.style.height=height+'px';this.renderer.setSize(width,height);this.camera.right=width;this.camera.top=height;this.camera.bottom=0;this.camera.updateProjectionMatrix();}
+   this.root.style.left=(board.left-parent.left-1)+'px';this.root.style.top=(board.top-parent.top-1)+'px';if(changed){this.root.style.width=width+'px';this.root.style.height=height+'px';this.renderer.setSize(width,height);this.camera.right=width;this.camera.top=height;this.camera.bottom=0;this.camera.updateProjectionMatrix();}
    if(!this.slots.length)this.slots=Array.from(document.querySelectorAll('.slot'));
    this.targets=this.slots.map(slot=>{const svg=slot.querySelector('.bottle'),r=slot.getBoundingClientRect();if(!svg)return{x:r.left+r.width/2-board.left,y:r.top+9-board.top};const css=getComputedStyle(svg),w=parseFloat(css.width),h=parseFloat(css.height),padding=parseFloat(getComputedStyle(slot).paddingBottom)||13;const left=r.left+r.width/2-w/2-board.left,top=r.bottom-padding-h-board.top;return{x:left+w/2,y:top+10*h/82,neck:h*.798,left,top,width:w,height:h};});this.needsMeasure=false;this.dirty=true;
  }
@@ -48,12 +48,12 @@ class LiquidScene {
  prepare(){if(this.needsMeasure)this.measure();}
  material(color,available=false){
    const key=color+':'+available;if(!this.materials.has(key)){
-     const material=new THREE.ShaderMaterial({uniforms:{uTint:{value:new THREE.Color(color)}},vertexShader:`varying vec3 vN; void main(){vN=normalize(normalMatrix*normal);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,fragmentShader:`varying vec3 vN;uniform vec3 uTint;void main(){vec3 n=normalize(vN);vec3 l=normalize(vec3(-.5,.7,1.));float diffuse=max(dot(n,l),0.);float spec=pow(max(dot(n,normalize(l+vec3(0.,0.,1.))),0.),55.);float fresnel=pow(1.-abs(n.z),3.);vec3 col=uTint*(.45+.65*diffuse)+vec3(spec*.85)+vec3(.5,.85,.75)*fresnel*.25;gl_FragColor=vec4(col,.96);#include <colorspace_fragment>}`.replace(';#include',';\n#include'),transparent:true});
-     if(!available)material.uniforms.uTint.value.multiplyScalar(.72);this.materials.set(key,material);
+     const material=new THREE.ShaderMaterial({uniforms:{uTint:{value:new THREE.Color(color)}},vertexShader:`varying vec3 vN; void main(){vN=normalize(normalMatrix*normal);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,fragmentShader:`varying vec3 vN;uniform vec3 uTint;void main(){vec3 n=normalize(vN);vec3 l=normalize(vec3(-.5,.7,1.));float diffuse=max(dot(n,l),0.);float spec=pow(max(dot(n,normalize(l+vec3(0.,0.,1.))),0.),55.);float fresnel=pow(1.-abs(n.z),3.);vec3 col=uTint*(.72+.58*diffuse)+vec3(spec*.85)+vec3(.5,.85,.75)*fresnel*.25;gl_FragColor=vec4(col,.96);#include <colorspace_fragment>}`.replace(';#include',';\n#include'),transparent:true});
+     if(!available)material.uniforms.uTint.value.multiplyScalar(.96);this.materials.set(key,material);
    }return this.materials.get(key);
  }
  symbolTexture(color,symbol){
-   if(!this.textures.has(color)){const c=document.createElement('canvas');c.width=c.height=64;const g=c.getContext('2d');g.font='32px Georgia';g.textAlign='center';g.textBaseline='middle';g.fillStyle='rgba(255,255,255,.8)';g.fillText(symbol,32,34);const texture=new THREE.CanvasTexture(c);this.textures.set(color,texture);}return this.textures.get(color);
+   if(!this.textures.has(color)){const c=document.createElement('canvas');c.width=c.height=64;const g=c.getContext('2d');g.font='32px Georgia';g.textAlign='center';g.textBaseline='middle';g.lineWidth=3;g.strokeStyle='rgba(35,13,66,.6)';g.strokeText(symbol,32,34);g.fillStyle='white';g.fillText(symbol,32,34);const texture=new THREE.CanvasTexture(c);this.textures.set(color,texture);}return this.textures.get(color);
  }
  update(now,columns,effects,colors,animating=true,motions=[]){
    if(!this.available){this.dirty=false;return;}
