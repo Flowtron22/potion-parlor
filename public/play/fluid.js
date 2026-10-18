@@ -1,6 +1,9 @@
 import * as THREE from './vendor/three.module.min.js';
 import {LiquidSurface} from './liquid-physics.mjs';
-import {PavelFluid,FLOW_TRAVEL_SECONDS} from './pavel-fluid.mjs?v=outlet2';
+import {PavelFluid} from './pavel-fluid.mjs?v=soul5';
+import {SoulField} from './soul-field.mjs?v=soul5';
+import {soulPose,POP_END} from './soul-motion.mjs';
+window.potionSoulPose=soulPose;
 
 // Pavel Dobryakov's velocity/dye fluid solver drives both pours and bottle mixing.
 const fluidVertex=`varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`;
@@ -30,9 +33,8 @@ class LiquidScene {
    const tear=new THREE.SphereGeometry(1,20,16),vertices=tear.attributes.position;for(let i=0;i<vertices.count;i++){const y=vertices.getY(i),t=.76-.24*y;vertices.setX(i,vertices.getX(i)*t);vertices.setZ(i,vertices.getZ(i)*t);}tear.computeVertexNormals();
    const hex=new THREE.CylinderGeometry(1,1,1.05,6,1);hex.rotateX(Math.PI/2);
    this.geometries=[new THREE.SphereGeometry(1,20,16),new THREE.OctahedronGeometry(1),hex,new THREE.DodecahedronGeometry(1),tear,new THREE.TetrahedronGeometry(1)];this.meshes=new Map();this.materials=new Map();this.textures=new Map();this.splashes=[];this.seen=new WeakSet();this.available=true;
-   this.jets=new Map();this.streamPool=[];this.vessels=[];this.surfaces=[];this.surfaceActive=false;this.previousTime=0;this.liquidGeometry=new THREE.PlaneGeometry(1,1);
-   // Compile/allocate one field now, so unsupported GPUs fall back cleanly.
-   this.streamPool.push(this.makeStream());this.streamPool[0].solver.step(1/120);this.streamPool[0].solver.clear();this.renderer.setRenderTarget(null);this.renderer.compile(this.scene,this.camera);
+   this.departures=new Map();this.soul=new SoulField(this.renderer);this.scene.add(this.soul.mesh);this.vessels=[];this.surfaces=[];this.surfaceActive=false;this.previousTime=0;this.liquidGeometry=new THREE.PlaneGeometry(1,1);
+   this.soul.solver.step(1/120);this.soul.clear();this.renderer.setRenderTarget(null);this.renderer.compile(this.scene,this.camera);
    this.renderer.domElement.addEventListener('webglcontextlost',e=>{e.preventDefault();this.available=false;this.dirty=true;this.root.style.display='none';});
    this.renderer.domElement.addEventListener('webglcontextrestored',()=>{this.available=true;this.dirty=true;this.root.style.display='';});
    this.observer=new ResizeObserver(()=>this.measure());this.observer.observe(document.querySelector('.game'));this.measure();
@@ -68,23 +70,9 @@ class LiquidScene {
      group.userData.sphere.rotation.z=-(d.renderAngle??d.angle??0);group.rotation.z=0;group.children[1].scale.set(r*1.25,r*1.25,1);group.children[1].position.z=r*.8+2;
    }));
    for(const [id,group] of this.meshes){if(!live.has(id)){this.scene.remove(group);group.children[1].material.dispose();this.meshes.delete(id);}}
-   const active=new Set();
-   for(const e of effects){
-     active.add(e);let stream=this.jets.get(e);if(!stream){stream=this.streamPool.pop()||this.makeStream();stream.solver.clear();stream.lastNow=e.start;this.jets.set(e,stream);}
-     const p=Math.max(0,Math.min(1,(now-e.start)/e.duration)),m=motions[e.slot];let target=this.targets[e.slot]||{x:e.to.x*this.scaleX,y:this.height-30};
-     if(m)target={...target,x:target.x+(target.neck||0)*Math.sin(m.angle),y:target.y+(target.neck||0)*(1-Math.cos(m.angle))+m.lift};
-     const source={x:e.from.x*this.scaleX,y:e.from.y*this.scaleY},left=Math.min(source.x,target.x)-24,top=source.y-12,w=Math.abs(source.x-target.x)+48,h=Math.max(40,target.y-source.y+24);
-     const inlet={x:(source.x-left)/w,y:1-(source.y-top)/h},outlet={x:(target.x-left)/w,y:1-(target.y-top)/h};
-     const color=new THREE.Color(colors[e.color].hex);
-     const flowDt=Math.min(.1,Math.max(0,(now-stream.lastNow)/1000));stream.lastNow=now;
-     if(p<.60)stream.solver.inject({x:inlet.x,y:inlet.y,color,radius:Math.pow(3.1/h,2),amount:1.25*flowDt*60,aspectRatio:w/h});
-     stream.solver.step(flowDt,{source:inlet,target:outlet,time:t});const uniforms=stream.mesh.material.uniforms;
-     uniforms.uDye.value=stream.solver.texture;uniforms.uSource.value.set(inlet.x,inlet.y);uniforms.uTarget.value.set(outlet.x,outlet.y);uniforms.uSize.value.set(w,h);uniforms.uFade.value=1-Math.max(0,(p-.93)/.07);
-     stream.mesh.visible=true;stream.mesh.scale.set(w,h,1);stream.mesh.position.set(left+w/2,this.height-top-h/2,85);
-     e.delivered=Math.max(0,Math.min(1,((now-e.start)/1000-FLOW_TRAVEL_SECONDS)/(.60*e.duration/1000)));
-   }
-   for(const [e,stream] of this.jets)if(!active.has(e)){stream.mesh.visible=false;this.jets.delete(e);this.streamPool.push(stream);}
-   this.surfaceActive=false;
+   this.updateDepartures(now,effects,colors);
+   this.soul.update(now,effects,colors,this.width,this.height,this.targets,motions,this.scaleX,this.scaleY);
+   this.surfaceActive=this.soul.active;
    for(let i=0;i<this.slots.length;i++){
      const svg=this.slots[i].querySelector('.bottle'),path=svg?.querySelector('.liquid-body');
      if(!path){this.surfaces[i]=null;this.releaseVessel(i);continue;}
@@ -106,9 +94,23 @@ class LiquidScene {
    this.splashes=[];const pouring=new Set(effects.map(e=>e.slot));for(let i=0;i<this.slots.length;i++)this.slots[i].classList.toggle('pouring',pouring.has(i));
    this.renderer.setRenderTarget(null);this.renderer.autoClear=true;this.renderer.render(this.scene,this.camera);this.renderCount++;this.dirty=false;
  }
- makeStream(){const solver=new PavelFluid(this.renderer,{width:96,height:128,dyeWidth:256,dyeHeight:256,guided:true}),mesh=new THREE.Mesh(this.liquidGeometry,fluidMaterial(solver));mesh.frustumCulled=false;mesh.visible=false;this.scene.add(mesh);return{solver,mesh};}
+ updateDepartures(now,effects,colors){
+  const active=new Set();for(const e of effects){const p=Math.max(0,(now-e.start)/e.duration);if(p>=POP_END||e.stored)continue;active.add(e);
+   let pop=this.departures.get(e);if(!pop){
+    const material=this.material(colors[e.color].hex,true).clone();material.uniforms.uPopFade={value:1};material.fragmentShader=material.fragmentShader.replace('uniform vec3 uTint;','uniform vec3 uTint;uniform float uPopFade;').replace('vec4(col,.96)','vec4(col,uPopFade)');
+    const gem=new THREE.Mesh(this.geometries[e.shape??0],material);gem.frustumCulled=false;this.scene.add(gem);
+    const ringMat=new THREE.ShaderMaterial({vertexShader:fluidVertex,fragmentShader:`varying vec2 vUv;uniform vec3 tint;uniform float phase;void main(){float r=length((vUv-.5)*2.);float ring=exp(-pow((r-(.14+phase*.75))/.045,2.))*(1.-phase);gl_FragColor=vec4(tint*1.6,ring*.8);}`,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,depthTest:false,uniforms:{tint:{value:new THREE.Color(colors[e.color].hex)},phase:{value:0}}});
+    const ring=new THREE.Mesh(this.liquidGeometry,ringMat);ring.frustumCulled=false;this.scene.add(ring);pop={gem,ring};this.departures.set(e,pop);
+   }
+   const pose=soulPose(p,e.from,e.to,e.gemId),r=e.radius*this.scaleX,scale=Math.max(.001,pose.popScale);
+   pop.gem.scale.set(r*(1+pose.squash)*scale,r*(e.aspect||1)*(1-pose.squash)*this.scaleY/this.scaleX*scale,r*.72*scale);
+   pop.gem.position.set(e.from.x*this.scaleX,this.height-e.from.y*this.scaleY-pose.squash*r*.45,30);pop.gem.rotation.z=-(e.angle||0);pop.gem.material.uniforms.uPopFade.value=Math.min(1,pose.popScale*2);
+   pop.ring.scale.set(r*4,r*1.6,1);pop.ring.position.set(e.from.x*this.scaleX,this.height-244*this.scaleY,86);pop.ring.material.uniforms.phase.value=Math.min(1,p/POP_END);
+  }
+  for(const [e,pop]of this.departures)if(!active.has(e)){this.scene.remove(pop.gem,pop.ring);pop.gem.material.dispose();pop.ring.material.dispose();this.departures.delete(e);}
+ }
  releaseVessel(i){const vessel=this.vessels[i];if(!vessel)return;this.scene.remove(vessel.mesh);vessel.mesh.material.dispose();vessel.solver.dispose();this.vessels[i]=null;}
 
- reset(){for(const stream of this.jets.values()){stream.mesh.visible=false;this.streamPool.push(stream);}this.jets.clear();for(let i=0;i<this.vessels.length;i++)this.releaseVessel(i);this.surfaces=[];this.surfaceActive=false;this.previousTime=0;this.dirty=true;this.splashes=[];this.seen=new WeakSet();for(const group of this.meshes.values()){this.scene.remove(group);group.children[1].material.dispose();}this.meshes.clear();}
+ reset(){this.soul.clear();for(const pop of this.departures.values()){this.scene.remove(pop.gem,pop.ring);pop.gem.material.dispose();pop.ring.material.dispose();}this.departures.clear();for(let i=0;i<this.vessels.length;i++)this.releaseVessel(i);this.surfaces=[];this.surfaceActive=false;this.previousTime=0;this.dirty=true;this.splashes=[];this.seen=new WeakSet();for(const group of this.meshes.values()){this.scene.remove(group);group.children[1].material.dispose();}this.meshes.clear();}
 }
-try{window.potionFluid=new LiquidScene();document.documentElement.dataset.liquid='three';document.documentElement.dataset.fluidEngine='pavel-dobryakov';document.documentElement.dataset.fluidBuild='outlet2';}catch(error){document.querySelector('.fluid-layer')?.remove();document.documentElement.dataset.liquid='canvas';console.warn('Liquid rendering uses the Canvas fallback.',error.message);}
+try{window.potionFluid=new LiquidScene();document.documentElement.dataset.liquid='three';document.documentElement.dataset.fluidEngine='pavel-dobryakov';document.documentElement.dataset.fluidBuild='soul5';}catch(error){document.querySelector('.fluid-layer')?.remove();document.documentElement.dataset.liquid='canvas';console.warn('Liquid rendering uses the Canvas fallback.',error.message);}

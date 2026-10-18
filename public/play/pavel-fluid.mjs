@@ -32,19 +32,19 @@ float decay =`);
  if(name==='gradientSubtract')source=source.replace('vec2 velocity =',`float C=texture2D(uPressure,vUv).x;if(solid(vL))L=C;if(solid(vR))R=C;if(solid(vT))T=C;if(solid(vB))B=C;\nvec2 velocity =`).replace('gl_FragColor =',`if(solid(vL)||solid(vR))velocity.x=0.;if(solid(vT)||solid(vB))velocity.y=0.;\ngl_FragColor =`);
  return boundary+source;
 }
-const force=`varying vec2 vUv;uniform sampler2D uVelocity;uniform float dt,uTime,uGuided;uniform vec2 uSource,uTarget,uResolution;
+const force=`varying vec2 vUv;uniform sampler2D uVelocity;uniform float dt,uTime,uGuided,uGravity;uniform vec2 uSource,uTarget,uResolution;
 void main(){if(solid(vUv)){gl_FragColor=vec4(0.);return;}vec2 v=texture2D(uVelocity,vUv).xy;
  if(uGuided>.5){float q=clamp((vUv.y-uSource.y)/min(-.001,uTarget.y-uSource.y),0.,1.);float center=mix(uSource.x,uTarget.x,q*(2.-q));float dy=uTarget.y-uSource.y;
   float near=exp(-pow((vUv.x-center)*uResolution.x/9.,2.));v.x+=sin(q*16.+uTime*7.)*near*dt*6.;
- }else{v.y-=dt*18.;}
+ }else{v.y-=dt*uGravity;}
  gl_FragColor=vec4(clamp(v,vec2(-900.),vec2(900.)),0.,1.);}`;
 const clear=`varying vec2 vUv;uniform sampler2D uTexture;uniform float value;void main(){gl_FragColor=texture2D(uTexture,vUv)*value;}`;
 const geometry=new THREE.PlaneGeometry(2,2);
 
 export class PavelFluid {
- constructor(renderer,{width=80,height=112,dyeWidth=192,dyeHeight=256,mask=null,guided=false,storageType=THREE.HalfFloatType}={}){
+ constructor(renderer,{width=80,height=112,dyeWidth=192,dyeHeight=256,mask=null,guided=false,storageType=THREE.HalfFloatType,densityDissipation=guided?1.5:.35,velocityDissipation=1.2,pressureDecay=.8,vorticity=guided?10:22,gravity=18,pressureIterations=14}={}){
   if(!renderer.extensions.has('EXT_color_buffer_float'))throw Error('Floating-point fluid buffers unavailable');
-  this.renderer=renderer;this.width=width;this.height=height;this.mask=mask;this.guided=guided;this.storageType=storageType;this.steps=0;this.disposed=false;
+  this.renderer=renderer;this.width=width;this.height=height;this.mask=mask;this.guided=guided;this.storageType=storageType;this.steps=0;this.disposed=false;this.config={densityDissipation,velocityDissipation,pressureDecay,vorticity,gravity,pressureIterations};
   this.scene=new THREE.Scene();this.camera=new THREE.Camera();this.mesh=new THREE.Mesh(geometry);this.mesh.frustumCulled=false;this.mesh.material.dispose();this.scene.add(this.mesh);this.materials={};this.targets=[];
   this.velocity=this.double(width,height);this.dye=this.double(dyeWidth,dyeHeight);this.pressure=this.double(width,height);this.divergence=this.target(width,height);this.curl=this.target(width,height);
   for(const [name,source] of Object.entries(upstream))this.materials[name]=this.material(masked(name,source),name==='advection');
@@ -64,16 +64,15 @@ export class PavelFluid {
  }
  step(dt,{source={x:.5,y:.9},target={x:.5,y:.1},time=0}={}){
   const flowDelta=Math.min(.1,Math.max(0,dt));dt=Math.min(1/30,Math.max(1/240,dt));const texel=new THREE.Vector2(1/this.width,1/this.height),flow={openFlow:this.guided?1:0,flowDelta,flowInlet:new THREE.Vector2(source.x,source.y),flowOutlet:new THREE.Vector2(target.x,target.y)};
-  this.run('force',this.velocity.write,{uVelocity:this.velocity.read.texture,dt,uTime:time,uGuided:this.guided?1:0,uSource:new THREE.Vector2(source.x,source.y),uTarget:new THREE.Vector2(target.x,target.y),uResolution:new THREE.Vector2(this.width,this.height)});this.velocity.swap();
-  this.run('curl',this.curl,{uVelocity:this.velocity.read.texture});
-  this.run('vorticity',this.velocity.write,{uVelocity:this.velocity.read.texture,uCurl:this.curl.texture,curl:this.guided?10:22,dt});this.velocity.swap();
+  this.run('force',this.velocity.write,{uVelocity:this.velocity.read.texture,dt,uTime:time,uGuided:this.guided?1:0,uGravity:this.config.gravity,uSource:new THREE.Vector2(source.x,source.y),uTarget:new THREE.Vector2(target.x,target.y),uResolution:new THREE.Vector2(this.width,this.height)});this.velocity.swap();
+  if(this.config.vorticity){this.run('curl',this.curl,{uVelocity:this.velocity.read.texture});this.run('vorticity',this.velocity.write,{uVelocity:this.velocity.read.texture,uCurl:this.curl.texture,curl:this.config.vorticity,dt});this.velocity.swap();}
   this.run('divergence',this.divergence,{uVelocity:this.velocity.read.texture});
-  this.run('clear',this.pressure.write,{uTexture:this.pressure.read.texture,value:.8});this.pressure.swap();
-  for(let i=0;i<14;i++){this.run('pressure',this.pressure.write,{uPressure:this.pressure.read.texture,uDivergence:this.divergence.texture});this.pressure.swap();}
+  this.run('clear',this.pressure.write,{uTexture:this.pressure.read.texture,value:this.config.pressureDecay});this.pressure.swap();
+  for(let i=0;i<this.config.pressureIterations;i++){this.run('pressure',this.pressure.write,{uPressure:this.pressure.read.texture,uDivergence:this.divergence.texture});this.pressure.swap();}
   this.run('gradientSubtract',this.velocity.write,{uPressure:this.pressure.read.texture,uVelocity:this.velocity.read.texture});this.velocity.swap();
-  this.run('advection',this.velocity.write,{...flow,emitDye:0,uVelocity:this.velocity.read.texture,uSource:this.velocity.read.texture,texelSize:texel,dyeTexelSize:texel,dt,dissipation:1.2});this.velocity.swap();
+  this.run('advection',this.velocity.write,{...flow,emitDye:0,uVelocity:this.velocity.read.texture,uSource:this.velocity.read.texture,texelSize:texel,dyeTexelSize:texel,dt,dissipation:this.config.velocityDissipation});this.velocity.swap();
   const inlet=this.inflow,rate=inlet?inlet.amount/Math.max(.001,flowDelta*60):0;
-  this.run('advection',this.dye.write,{...flow,emitDye:inlet?1:0,inletColor:inlet?new THREE.Vector3(inlet.color.r*rate,inlet.color.g*rate,inlet.color.b*rate):new THREE.Vector3(),inletRadius:inlet?.radius||.001,inletAspect:inlet?.aspectRatio||1,uVelocity:this.velocity.read.texture,uSource:this.dye.read.texture,texelSize:texel,dyeTexelSize:new THREE.Vector2(1/this.dye.read.width,1/this.dye.read.height),dt,dissipation:this.guided?1.5:.35});this.dye.swap();this.inflow=null;this.steps++;
+  this.run('advection',this.dye.write,{...flow,emitDye:inlet?1:0,inletColor:inlet?new THREE.Vector3(inlet.color.r*rate,inlet.color.g*rate,inlet.color.b*rate):new THREE.Vector3(),inletRadius:inlet?.radius||.001,inletAspect:inlet?.aspectRatio||1,uVelocity:this.velocity.read.texture,uSource:this.dye.read.texture,texelSize:texel,dyeTexelSize:new THREE.Vector2(1/this.dye.read.width,1/this.dye.read.height),dt,dissipation:this.config.densityDissipation});this.dye.swap();this.inflow=null;this.steps++;
  }
  get texture(){return this.dye.read.texture;}
  dispose(){if(this.disposed)return;this.disposed=true;for(const target of this.targets)target.dispose();for(const material of Object.values(this.materials))material.dispose();this.mask?.dispose();}

@@ -4,6 +4,10 @@ import fs from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 const assets=new Map([
  ['/tests/fixtures/flow-gpu.html','text/html'],
+ ['/tests/fixtures/soul-gpu.html','text/html'],
+ ['/public/play/soul-field.mjs','application/javascript'],
+ ['/public/play/soul-motion.mjs','application/javascript'],
+ ['/public/play/vendor/pavel-fluid/post.mjs','application/javascript'],
  ['/public/play/pavel-fluid.mjs','application/javascript'],
  ['/public/play/vendor/three.module.min.js','application/javascript'],
  ['/public/play/vendor/three.core.min.js','application/javascript'],

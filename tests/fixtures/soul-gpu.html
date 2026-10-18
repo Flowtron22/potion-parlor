@@ -1,0 +1,26 @@
+<!doctype html><meta charset="utf-8"><title>Soul fluid GPU check</title>
+<style>body{background:#142b24;color:#f2e9ce;font:14px system-ui;padding:20px}canvas{width:360px;height:360px;border:1px solid #688575;border-radius:20px}li{margin:12px 0}.pass{color:#a9dfb4}.fail{color:#ff9797}</style>
+<h1>Soul fluid GPU check</h1><p>128 simulation · 1024 dye · diffusion 4 / 0 · pressure 0 · curl 0 · splat .04 · bloom 2 / 1 · sunrays 1</p><p id="status">Running…</p><ol id="results"></ol><button id="preview" disabled>Preview mid-flight</button>
+<script type="module">
+import * as THREE from '../../public/play/vendor/three.module.min.js';
+import {SoulField} from '../../public/play/soul-field.mjs?v=soul5';
+import {soulPose,SOUL_SETTINGS} from '../../public/play/soul-motion.mjs';
+const renderer=new THREE.WebGLRenderer({alpha:true});renderer.setSize(360,360);renderer.setClearColor(0,0);document.body.append(renderer.domElement);
+const scene=new THREE.Scene(),camera=new THREE.OrthographicCamera(0,360,360,0,.1,1000);camera.position.z=500;
+const soul=new SoulField(renderer);scene.add(soul.mesh);const output=new THREE.WebGLRenderTarget(360,360),pixels=new Uint8Array(360*360*4);let failures=0;
+for(const fps of [60,30,15]){
+ soul.clear();const effect={gemId:1,slot:0,start:0,duration:1100,from:{x:70,y:160},to:{x:290,y:320},color:0};const target={x:290,y:320},line=document.createElement('li');document.getElementById('results').append(line);let flight=0,arrival=0,earlyFill=0,drained=0;
+ for(let frame=1;frame<=Math.ceil(fps*1.65);frame++){
+  const ms=frame/fps*1000,p=ms/1100;soul.update(ms,p<1?[effect]:[],[{hex:'#f17b91'}],360,360,[target],[],1,1);
+  renderer.setRenderTarget(output);renderer.render(scene,camera);renderer.readRenderTargetPixels(output,0,0,360,360,pixels);
+  const sample=(x,y,r=8)=>{let max=0;for(let yy=Math.max(0,Math.round(360-y)-r);yy<Math.min(360,Math.round(360-y)+r);yy++)for(let xx=Math.max(0,Math.round(x)-r);xx<Math.min(360,Math.round(x)+r);xx++){const i=(yy*360+xx)*4;max=Math.max(max,pixels[i],pixels[i+1],pixels[i+2]);}return max;};
+  if(p>.3&&p<.7){const pose=soulPose(p,effect.from,target);flight=Math.max(flight,sample(pose.x,pose.y,14));}
+  if(p>.69&&p<.84)arrival=Math.max(arrival,sample(target.x,target.y,16));if(p<.78)earlyFill=Math.max(earlyFill,effect.delivered||0);if(ms>1600)drained=pixels.reduce((a,b)=>Math.max(a,b),0);
+  if(frame%4===0)await new Promise(requestAnimationFrame);
+ }
+ const ok=flight>70&&arrival>45&&earlyFill===0&&drained===0;line.className=ok?'pass':'fail';line.textContent=`${ok?'PASS':'FAIL'} ${fps} fps · travelling light ${flight}/255 · neck ${arrival}/255 · early fill ${earlyFill} · drained ${drained}`;if(!ok)failures++;
+}
+document.getElementById('status').textContent=failures?`${failures} failures`:'PASS: luminous fluid reaches the neck, filling waits for arrival, tails drain.';document.documentElement.dataset.result=failures?'fail':'pass';
+renderer.setRenderTarget(null);renderer.render(scene,camera);
+document.getElementById('preview').disabled=false;document.getElementById('preview').onclick=()=>{soul.clear();const e={gemId:1,slot:0,start:0,duration:1100,from:{x:70,y:160},to:{x:290,y:320},color:0};for(let frame=1;frame<=34;frame++)soul.update(frame/60*1000,[e],[{hex:'#f17b91'}],360,360,[e.to],[],1,1);renderer.setRenderTarget(null);renderer.render(scene,camera);};
+</script>

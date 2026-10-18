@@ -1,19 +1,42 @@
 # Potion flow
 
-The fluid engine is adapted from [Pavel Dobryakov's WebGL Fluid Simulation](https://github.com/PavelDoGreat/WebGL-Fluid-Simulation), pinned to commit `a2d292931f19d9b3b9f564e23e6c32729d2121c3`. The original seven GLSL solver passes are retained in `public/play/vendor/pavel-fluid/shaders.mjs`, with the full MIT license beside them. This replaces the previous CPU particle jet; it is not an iframe or a visual imitation of the demo.
+The GPU solver and bloom/sunray passes are adapted from [Pavel Dobryakov's MIT-licensed WebGL Fluid Simulation](https://github.com/PavelDoGreat/WebGL-Fluid-Simulation), pinned to `a2d292931f19d9b3b9f564e23e6c32729d2121c3`. Extracted source and the license live in `public/play/vendor/pavel-fluid/`. No upstream GUI, analytics, pointer handlers or random splats are included.
 
-`public/play/pavel-fluid.mjs` runs velocity/dye advection, curl, vorticity confinement, divergence, pressure relaxation and pressure-gradient subtraction using floating-point Three.js render targets. Game-controlled inlets and open through-flow deliver each colored pour to its flask. Vessel masks add no-flow walls and a moving fill boundary to the upstream solver. The display shades the actual advected dye field.
+## Floor pop → soul → flask
 
-`public/play/fluid.js` owns pooled stream fields and a smaller independent mixing field for each active flask. Vessel masks come from the displayed SVG shape, so differently sized bottles retain their silhouettes. Later recipe ingredients enter the existing field and mix with previous pigments. The SVG surface retains damped impact ripples, and its fill progression stays tied to the game animation. Gem collection, recipe order and server score validation are unaffected.
+A selected floor gem now compresses, expands a small impact ring, and dissolves over the first 16% of its existing 1.1-second collection animation. Its 3D shape briefly remains visible during that pop. Stored spell essence emits light without inventing a physical gem.
 
-The reference is a 2D incompressible velocity/dye effect. The adaptation is also 2D; it does not simulate 3D free-surface water or measure conserved fluid volume. The amount added to a flask is prescribed by the existing pour event. There are no individual rendered fluid particles.
+The travelling effect uses one shared free velocity/dye field (`soul-field.mjs`), replacing the previous narrow guided jet. A moving emitter follows a rising, curled path to the actual flask neck. A continuous GPU segment splat integrates motion between frames, avoiding both rendered circle particles and repeated full-resolution splats. The dye itself advects and deforms through Pavel's incompressible pressure solver; there is no hard path-width mask. Multiple simultaneous wisps share and interact in that field.
 
-The shader programs are prewarmed; velocity grids are 96×128 for streams and 48×64 for vessels, with higher-resolution dye. Render targets are reused for subsequent pours. Mixing continues briefly after an impact, then rendering stops when the rest of the game is idle. A GPU without renderable floating-point buffers retains the existing Canvas fallback. No upstream GUI, pointer listeners, promotional UI, analytics or random splats are included.
+The supplied screenshot's visible settings are declared in `soul-motion.mjs`:
 
-Verify the SVG wave response with `node verify-liquid.mjs`, compile with `npm run build:vercel`, and inspect the real GPU effect in a browser. `?profile` exposes frame timings and `data-fluid-engine="pavel-dobryakov"` on the document element. Browser QA should include overlapping pours, two-color recipes, switching levels during a pour, and idle render suspension.
+| Setting | Value |
+| --- | ---: |
+| Simulation resolution | 128 |
+| Dye quality | High / 1024 |
+| Density dissipation (GUI: diffusion) | 4 |
+| Velocity dissipation | 0 |
+| Pressure persistence | 0 |
+| Vorticity | 0 |
+| Splat radius | 0.04 |
+| Shading | On |
+| Bloom intensity / threshold | 2 / 1 |
+| Sunrays weight | 1 |
 
-## Open inlet and outlet
+Pressure 0 clears the previous pressure estimate; it does not disable the incompressibility solve. The wisp has no artificial gravity. Color remains tied to the gem, while high-dynamic-range emission, bloom and sunrays provide the luminous appearance. A display exposure curve keeps the game legible over its green background. The shared high-resolution field avoids allocating a 1024 dye field for each wisp.
 
-The pressure projection must not cancel the pour's net through-flow. The stream now transports dye in an exact divergence-free background flow with a 0.30-second transit, while the projected velocity field supplies the simulated eddies. Continuous inlet emission is integrated over the frame interval instead of inserting separated splats. Dye leaving the neck is absorbed. Flask filling uses the same transit constant; low frame rates no longer delay the visible dye independently of the fill counter. `data-fluid-build="outlet2"` identifies this fix, and versioned module URLs prevent an older cached solver from surviving a reload.
+At 78% of the animation the head reaches the neck. Only then does delivery progress from 0 to 1. A local sink absorbs dye around the mouth, and residual light fades and clears within 400 ms after the final transfer. The game still completes the gem at the same 1.1-second event boundary, preserving scoring, parallel pouring, recipe rules and server validation.
 
-Run `node scripts/serve-flow-check.mjs`, then open the printed local URL. The fixture runs real GPU readbacks, checking vertical and sideways pours at 15, 30 and 60 fps. It requires dye to reach the flask neck in under 0.46 seconds, rejects premature delivery, and checks that the stream drains after emission stops. This test catches the previously observed suspended-streak failure; it does not infer success from shader compilation or the bottle's fill animation.
+Flasks keep their original independent masked mixing fields and damped SVG surface waves. Visible bottle silhouettes, colors and small symbols remain unchanged. The overlay's placement follows the real flask geometry, including sway and changes in the spell prompt. Unsupported floating-point GPUs retain a simpler glowing Canvas trail and floor pop.
+
+`data-fluid-build="soul5"` identifies the new effect; versioned module URLs prevent a previous jet renderer from surviving a reload.
+
+## Verification
+
+- `node verify-soul.mjs`: screenshot settings, pop/flight/merge phases, exact neck arrival and no premature delivery.
+- `node verify-liquid.mjs`: finite, settling bottle surface waves at 30/60/120 fps.
+- `node verify-mastery.mjs`: spell-assisted gameplay and actual game collection integration.
+- `npm run build:vercel`: native Next/Vercel build.
+- `node scripts/serve-flow-check.mjs`: open `/tests/fixtures/soul-gpu.html` for real GPU pixel readbacks at 15/30/60 fps and a mid-flight preview. It verifies visible light at the travelling head and neck, zero early fill and drained residual light. The original `/tests/fixtures/flow-gpu.html` remains a regression for the legacy guided-transport implementation.
+
+This remains a 2D velocity/dye effect rather than 3D free-surface water. Fill volume is prescribed by the collection event, not measured from fluid mass.
