@@ -40,7 +40,7 @@ export async function checks(){
  assert.equal(db.prepare('SELECT COUNT(*) n FROM scores').get().n,0,'Wins must never publish scores');
  assert.equal((await post('submit',{ticket:next.data.id,name:'X',events:loss})).status,400);
  const posted=await post('submit',{ticket:next.data.id,name:'Test Brewer',title:'Mage',events:loss});assert.equal(posted.status,200);assert.equal(posted.data.score,won.score+partial.score);
- assert.equal((await post('submit',{ticket:next.data.id,name:'Test Brewer',events:loss})).status,409);
+ assert.equal((await post('submit',{ticket:next.data.id,name:'Test Brewer',title:'Mage',events:loss})).status,200);assert.equal(db.prepare('SELECT COUNT(*) n FROM scores WHERE run=?').get(next.data.id).n,1);
  const rows=await (await api.leaderboard(new Request('https://game.test/api/leaderboard',{headers:{Cookie:cookie}}))).json();assert.deepEqual(rows.rows,[{name:'Test Brewer',title:'Mage',score:won.score+partial.score,position:1,you:true}]);
  const foreign=await post('submit',{ticket:next.data.id,name:'Other Brewer',events:loss},'potion_player=11111111-2222-3333-4444-555555555555');assert.equal(foreign.status,400);
  const fresh=(await post('start',{level:2})).data;assert.equal(fresh.points,0);await post('submit',{ticket:fresh.id,name:'Test Brewer',title:'Archmage',events:loss});const best=await (await api.leaderboard(new Request('https://game.test/api/leaderboard'))).json();assert.equal(best.rows.length,1);assert.equal(best.rows[0].score,posted.data.score);

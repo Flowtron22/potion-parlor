@@ -33,7 +33,7 @@ class LiquidScene {
    const tear=new THREE.SphereGeometry(1,20,16),vertices=tear.attributes.position;for(let i=0;i<vertices.count;i++){const y=vertices.getY(i),t=.76-.24*y;vertices.setX(i,vertices.getX(i)*t);vertices.setZ(i,vertices.getZ(i)*t);}tear.computeVertexNormals();
    const hex=new THREE.CylinderGeometry(1,1,1.05,6,1);hex.rotateX(Math.PI/2);
    this.geometries=[new THREE.SphereGeometry(1,20,16),new THREE.OctahedronGeometry(1),hex,new THREE.DodecahedronGeometry(1),tear,new THREE.TetrahedronGeometry(1)];this.meshes=new Map();this.materials=new Map();this.textures=new Map();this.splashes=[];this.seen=new WeakSet();this.available=true;
-   this.departures=new Map();this.soul=new SoulField(this.renderer);this.scene.add(this.soul.mesh);this.vessels=[];this.surfaces=[];this.surfaceActive=false;this.previousTime=0;this.liquidGeometry=new THREE.PlaneGeometry(1,1);
+   this.spellBursts=[];this.raycaster=new THREE.Raycaster();this.departures=new Map();this.soul=new SoulField(this.renderer);this.scene.add(this.soul.mesh);this.vessels=[];this.surfaces=[];this.surfaceActive=false;this.previousTime=0;this.liquidGeometry=new THREE.PlaneGeometry(1,1);
    this.soul.solver.step(1/120);this.soul.clear();this.renderer.setRenderTarget(null);this.renderer.compile(this.scene,this.camera);
    this.renderer.domElement.addEventListener('webglcontextlost',e=>{e.preventDefault();this.available=false;this.dirty=true;this.root.style.display='none';});
    this.renderer.domElement.addEventListener('webglcontextrestored',()=>{this.available=true;this.dirty=true;this.root.style.display='';});
@@ -59,20 +59,20 @@ class LiquidScene {
  }
  update(now,columns,effects,colors,animating=true,motions=[]){
    if(!this.available){this.dirty=false;return;}
-   if(!animating&&!effects.length&&!this.splashes.length&&!this.surfaceActive&&!this.dirty)return;
+   if(!animating&&!effects.length&&!this.spellBursts.length&&!this.splashes.length&&!this.surfaceActive&&!this.dirty)return;
    const t=now/1000,dt=this.previousTime?Math.min(.04,(now-this.previousTime)/1000):1/60,live=new Set();this.previousTime=now;
    columns.forEach((column,i)=>column.forEach(d=>{
      live.add(d.id);let group=this.meshes.get(d.id);
-     if(!group){group=new THREE.Group();const sphere=new THREE.Mesh(this.geometries[d.shape],this.material(colors[d.color].hex));group.add(sphere);const label=new THREE.Sprite(new THREE.SpriteMaterial({map:this.symbolTexture(colors[d.color].hex+(d.material||''),d.material==='heavy'?'◆':colors[d.color].symbol),transparent:true,depthTest:false}));group.add(label);group.userData.sphere=sphere;this.meshes.set(d.id,group);this.scene.add(group);}
+     if(!group){group=new THREE.Group();const sphere=new THREE.Mesh(this.geometries[d.shape],this.material(colors[d.color].hex));group.add(sphere);const label=new THREE.Sprite(new THREE.SpriteMaterial({map:this.symbolTexture(colors[d.color].hex+(d.material||''),d.material==='heavy'?'◆':colors[d.color].symbol),transparent:true,depthTest:false}));group.add(label);sphere.userData.gemId=d.id;group.userData.sphere=sphere;this.meshes.set(d.id,group);this.scene.add(group);}
      group.userData.sphere.material=this.material(colors[d.color].hex,!!d.available);group.position.set((d.renderX??d.x??55+i*50)*this.scaleX,this.height-(d.renderY??d.y)*this.scaleY,15);
      const r=d.drawRadius*this.scaleX,squash=d.impact||0;
      group.userData.sphere.scale.set(r*(1+squash),r*d.aspect*(1-squash)*this.scaleY/this.scaleX,r*.72);
      group.userData.sphere.rotation.z=-(d.renderAngle??d.angle??0);group.rotation.z=0;group.children[1].scale.set(r*1.25,r*1.25,1);group.children[1].position.z=r*.8+2;
    }));
    for(const [id,group] of this.meshes){if(!live.has(id)){this.scene.remove(group);group.children[1].material.dispose();this.meshes.delete(id);}}
-   this.updateDepartures(now,effects,colors);
+   this.updateSpellBursts(now);if(this.root.dataset.gems!==String(this.meshes.size))this.root.dataset.gems=String(this.meshes.size);this.updateDepartures(now,effects,colors);
    this.soul.update(now,effects,colors,this.width,this.height,this.targets,motions,this.scaleX,this.scaleY);
-   this.surfaceActive=this.soul.active;
+   this.surfaceActive=this.soul.active||this.spellBursts.length>0;
    for(let i=0;i<this.slots.length;i++){
      const svg=this.slots[i].querySelector('.bottle'),path=svg?.querySelector('.liquid-body');
      if(!path){this.surfaces[i]=null;this.releaseVessel(i);continue;}
@@ -109,8 +109,19 @@ class LiquidScene {
   }
   for(const [e,pop]of this.departures)if(!active.has(e)){this.scene.remove(pop.gem,pop.ring);pop.gem.material.dispose();pop.ring.material.dispose();this.departures.delete(e);}
  }
+ pickGem(point){
+  if(this.needsMeasure)this.measure();this.scene.updateMatrixWorld(true);this.camera.updateMatrixWorld(true);
+  this.raycaster.setFromCamera(new THREE.Vector2(point.x*this.scaleX/this.width*2-1,1-point.y*this.scaleY/this.height*2),this.camera);
+  const hit=this.raycaster.intersectObjects([...this.meshes.values()].map(g=>g.userData.sphere),false)[0];return hit?.object.userData.gemId??null;
+ }
+ dissolve(gems,hex){
+  const group=new THREE.Group(),material=new THREE.ShaderMaterial({vertexShader:fluidVertex,fragmentShader:`varying vec2 vUv;uniform vec3 tint;uniform float progress;void main(){float r=length((vUv-.5)*2.);float ring=exp(-pow((r-(.3+progress*.6))/.065,2.));float mist=exp(-r*r*7.)*(1.-progress);float a=(ring+mist*.45)*(1.-progress);if(a<.004)discard;gl_FragColor=vec4(tint*1.5,a);}`,uniforms:{tint:{value:new THREE.Color(hex)},progress:{value:0}},transparent:true,blending:THREE.AdditiveBlending,depthTest:false,depthWrite:false});
+  for(const g of gems){const old=this.meshes.get(g.id);if(old){this.scene.remove(old);old.children[1].material.dispose();this.meshes.delete(g.id);}const puff=new THREE.Mesh(this.liquidGeometry,material),r=(g.drawRadius||g.radius)*this.scaleX;puff.scale.set(r*3.2,r*3.2,1);puff.position.set((g.renderX??g.x)*this.scaleX,this.height-(g.renderY??g.y)*this.scaleY,90);puff.renderOrder=20;group.add(puff);}
+  this.scene.add(group);this.spellBursts.push({group,material,start:performance.now()});this.dirty=true;this.root.dataset.gems=String(this.meshes.size);
+ }
+ updateSpellBursts(now){for(let i=this.spellBursts.length-1;i>=0;i--){const burst=this.spellBursts[i],p=(now-burst.start)/550;if(p>=1){this.scene.remove(burst.group);burst.material.dispose();this.spellBursts.splice(i,1);}else burst.material.uniforms.progress.value=Math.max(0,p);}}
  releaseVessel(i){const vessel=this.vessels[i];if(!vessel)return;this.scene.remove(vessel.mesh);vessel.mesh.material.dispose();vessel.solver.dispose();this.vessels[i]=null;}
 
- reset(){this.soul.clear();for(const pop of this.departures.values()){this.scene.remove(pop.gem,pop.ring);pop.gem.material.dispose();pop.ring.material.dispose();}this.departures.clear();for(let i=0;i<this.vessels.length;i++)this.releaseVessel(i);this.surfaces=[];this.surfaceActive=false;this.previousTime=0;this.dirty=true;this.splashes=[];this.seen=new WeakSet();for(const group of this.meshes.values()){this.scene.remove(group);group.children[1].material.dispose();}this.meshes.clear();}
+ reset(){for(const burst of this.spellBursts){this.scene.remove(burst.group);burst.material.dispose();}this.spellBursts=[];this.soul.clear();for(const pop of this.departures.values()){this.scene.remove(pop.gem,pop.ring);pop.gem.material.dispose();pop.ring.material.dispose();}this.departures.clear();for(let i=0;i<this.vessels.length;i++)this.releaseVessel(i);this.surfaces=[];this.surfaceActive=false;this.previousTime=0;this.dirty=true;this.splashes=[];this.seen=new WeakSet();for(const group of this.meshes.values()){this.scene.remove(group);group.children[1].material.dispose();}this.meshes.clear();}
 }
 try{window.potionFluid=new LiquidScene();document.documentElement.dataset.liquid='three';document.documentElement.dataset.fluidEngine='pavel-dobryakov';document.documentElement.dataset.fluidBuild='swirl7';}catch(error){document.querySelector('.fluid-layer')?.remove();document.documentElement.dataset.liquid='canvas';console.warn('Liquid rendering uses the Canvas fallback.',error.message);}

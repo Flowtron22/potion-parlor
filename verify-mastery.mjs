@@ -26,6 +26,7 @@ assert.equal(journey.status().rank.name,'Immortal Alchemist');assert.equal(journ
 assert.deepEqual(Array.from(M.ranks,r=>r.name),['Squire','Apprentice','Herbalist','Potion Brewer','Alchemist','Rune Caster','Mage','Archmage','Oracle','Arcane Sage','Immortal Alchemist']);
 const c=clientHarness();vm.runInContext(fs.readFileSync('public/play/spells.js','utf8'),c);c.reports=[];c.PotionTitles={status:()=>rich.status(),spend:type=>rich.spend(type),finish:(won,run)=>c.reports.push({won,run})};c.PotionMastery=M;
 c.fixture={level:1,slots:3,shelf:[null,null,null],columns:[[0,0,1].map((color,id)=>({id,color,x:90+id*90,y:218,shape:0,radius:25,drawRadius:25,aspect:1,seed:1}))],queue:[{id:0,color:0,capacity:2,shape:0,x:1,row:0,blockers:[]},{id:1,color:1,capacity:1,shape:0,x:4,row:0,blockers:[]}],bottleCount:2,total:3,brewed:0,moves:0,over:false};
+c.verificationBoard=structuredClone(c.fixture);
 vm.runInContext("newGame(1,fixture);physics.settle(3600);state.over=true;modalMode='lose';beginSpell('dispel');cancelSpell();",c);assert.equal(rich.status().free,1,'Cancel is free');assert.equal(vm.runInContext('state.over',c),true,'Cancel returns to the blocked board');
 vm.runInContext("beginSpell('dispel');castSpell(999);",c);assert.equal(rich.status().free,1,'Missing target is free');
 assert.equal(vm.runInContext('castSpell(0)',c),true);assert.equal(rich.status().free,0);assert.equal(vm.runInContext('state.over',c),false,'A spell resumes a blocked board');assert.equal(vm.runInContext('state.essence.length',c),1);
@@ -35,5 +36,5 @@ vm.runInContext("beginSpell('dispel');",c);assert.equal(vm.runInContext('spellMo
 vm.runInContext('choose(0);choose(1);tick(1000);',c);assert.equal(vm.runInContext('effects.length',c),2,'Stored essence pours beside a physical gem');
 vm.runInContext('let batch=effects;effects=[];batch.forEach(completePour);physics.settle(3600);tick(3000);batch=effects;effects=[];batch.forEach(completePour);tick(5000);',c);
 assert.equal(vm.runInContext('state.brewed',c),2);assert.equal(vm.runInContext('state.essence.length',c),0);assert.equal(c.reports.at(-1).won,true);assert.equal(c.reports.at(-1).run.rescued,true);
-const events=JSON.parse(vm.runInContext('JSON.stringify(runLog)',c));assert.throws(()=>validateRun(c.fixture,events),'Spell runs must not pass the shared leaderboard validator');
-console.log('PASS: four-win Apprentice (including assisted wins), wallet/free spells, no XP spending, partial reward caps, replay protection, daily rollover, migration, cancellation, no undo refunds, two-spell limit, essence conservation, completed spell-assisted board, ranked rejection.');
+const events=JSON.parse(vm.runInContext('JSON.stringify(runLog)',c));assert.equal(validateRun(c.verificationBoard,events).score,vm.runInContext('state.scoring.score',c),'Spell scoring must match the server');
+console.log('PASS: four-win Apprentice (including assisted wins), wallet/free spells, no XP spending, partial reward caps, replay protection, daily rollover, migration, cancellation, no undo refunds, two-spell limit, essence conservation, completed spell-assisted board, undo remains practice, verified spell score parity.');
