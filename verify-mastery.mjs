@@ -50,3 +50,5 @@ const reloaded=M.create(resetStorage);assert.equal(reloaded.status().rank.name,'
 console.log('PASS: spell-only progression reaches every title; old rank records are discarded; wallet persists while run progression resets.');
 
 assert.equal(profile.status().wins,0,'Reload starts a new rank');assert.deepEqual(Object.keys(JSON.parse(values.get('potion-mastery-v1'))).sort(),['free','mana','version']);
+
+const exact=M.create({getItem:()=>JSON.stringify({version:3,mana:80,free:0}),setItem(){}});assert.equal(M.prices.shuffle,80);assert(exact.spend('shuffle'));assert.equal(exact.status().mana,0);assert(!exact.spend('shuffle'));const short=M.create({getItem:()=>JSON.stringify({version:3,mana:79,free:0}),setItem(){}});assert(!short.spend('shuffle'));assert.equal(short.status().mana,79);console.log('PASS: Shuffle costs exactly 80 MP and rejects a 79 MP wallet without charging.');

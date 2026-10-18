@@ -26,7 +26,7 @@ Spells dissolve gems into stored essence, preserving all potion supply. Essence 
 
 Verify with `node verify-mastery.mjs` and `node verify-blocked.mjs`. These cover economy replay/partial reward protections, migration, spend persistence, the four-win gate, spell limits and cancellation, no undo refunds, essence conservation, a completed spell-assisted board, verified spell scores, all 30 original solutions and ordinary browser/server score parity.
 
-Shuffle costs 15 Mana with no two-cast limit. It tumbles the current gems without changing their identities, colors, bottles, fills or stored essence. Defeat results offer affordable spells, Restart and Undo, without explanatory paragraphs. Promotions display a brief rune, ring and star animation with reduced-motion support.
+Shuffle costs 80 Mana with no two-cast limit. It tumbles the current gems without changing their identities, colors, bottles, fills or stored essence. Defeat results offer affordable spells, Restart and Undo, without explanatory paragraphs. Promotions display a brief rune, ring and star animation with reduced-motion support.
 
 Every in-game restart (footer, defeat popup and Daily replay) generates a fresh, physically verified gem layout in a Web Worker. The bottle queue and ingredient counts stay the same. New layouts retain title/XP/Mana progression but are marked Shuffled and excluded from the canonical shared leaderboard. The first load of a level still uses the canonical ranked board. `node verify-remix.mjs` verifies a fresh solvable restart for each of the 30 levels. `node scripts/serve-rank-check.mjs` offers an isolated local fourth-win animation preview on port 4182.
 
@@ -39,3 +39,5 @@ A blocked shelf enters a rescue phase with spells and ranked Undo. End run appen
 All titles now depend only on XP and board wins. Spell-assisted wins count at every tier, including Mage through Immortal Alchemist; assisted wins qualify within the current run. Clean clears retain their optional XP bonus but never gate a title.
 
 The title panel includes Reset rank with an inline confirmation and Cancel. Confirming resets title, XP and wins to Squire and restarts Journey 1; it keeps Mana, free Dispel charges and shared leaderboard scores. Each new run starts its own reward ledger.
+
+Portrait phones use a viewport-height layout with safe-area padding. Level and score share a row; Mana sits beside the spells. Queue rows use proportional placement and 44px row pitch on phones, keeping all five rows and the full control bar visible without scrolling the game. Spell targeting overlays the board rather than pushing controls down.

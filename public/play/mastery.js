@@ -1,6 +1,6 @@
 // Run-local titles and a device-local spell wallet.
 globalThis.PotionMastery=(()=>{
- const KEY='potion-mastery-v1',prices={dispel:35,sweep:100,shuffle:15};
+ const KEY='potion-mastery-v1',prices={dispel:35,sweep:100,shuffle:80};
  const ranks=[
   {name:'Squire',xp:0,wins:0,level:0,rune:'◇'},
   {name:'Apprentice',xp:400,wins:4,level:0,rune:'✧'},
