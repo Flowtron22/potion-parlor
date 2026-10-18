@@ -2,13 +2,13 @@
  const $=id=>document.getElementById(id);let storage;
  try{storage=localStorage;}catch{}
  const profile=PotionMastery.create(storage);let returnFocus,attempt=0;
- function requirement(s){if(!s.next)return 'Highest title earned';const needs=[];if(s.wins<s.next.wins)needs.push(`${s.next.wins-s.wins} new board wins`);if(s.xp<s.next.xp)needs.push(`${(s.next.xp-s.xp).toLocaleString()} XP`);return `${needs.join(' · ')} to ${s.next.name}`;}
+ function requirement(s){if(!s.next)return 'Highest title earned';const needs=[];if(s.wins<s.next.wins)needs.push(`${s.next.wins-s.wins} wins this run`);if(s.xp<s.next.xp)needs.push(`${(s.next.xp-s.xp).toLocaleString()} XP`);return `${needs.join(' · ')} to ${s.next.name}`;}
  function render(){
   const s=profile.status();$('titleName').textContent=s.rank.name;$('titleRune').textContent=s.rank.rune;
   $('titleXP').textContent=s.xp.toLocaleString()+' XP';$('titleMeter').value=s.progress;
   $('titleMeter').setAttribute('aria-label',requirement(s));$('titleButton').setAttribute('aria-label',s.rank.name+', '+s.xp+' mastery XP. View title ladder');
   $('masterySummary').textContent=requirement(s);$('manaBalance').textContent=s.mana.toLocaleString();$('freeSpells').textContent=s.free?`${s.free} free`:35+' MP';
-  $('masteryStorage').textContent=s.persisted?'Titles and Mana saved on this device.':'Storage unavailable · progress lasts for this session.';
+  $('masteryStorage').textContent=s.persisted?'Rank lasts for this run. Mana saved on this device.':'Rank lasts for this run.';
   $('masteryIncome').textContent=`${s.wins} wins · ${s.income}+ MP / clear`;
   $('titleLadder').replaceChildren(...PotionMastery.ranks.map((rank,i)=>{
    const li=document.createElement('li'),rune=document.createElement('span'),copy=document.createElement('div'),name=document.createElement('strong'),detail=document.createElement('small'),mark=document.createElement('span');
@@ -31,6 +31,8 @@
  });
  globalThis.PotionTitles={
   status:()=>profile.status(),
+  startRun(){profile.resetRank();render();},
+  endRun(){const reached=profile.status();profile.resetRank();render();return reached;},
   spend(type){const paid=profile.spend(type);render();return paid;},
   finish(won,run){
    const result=won?profile.award(run):profile.consolation(run),s=profile.status();

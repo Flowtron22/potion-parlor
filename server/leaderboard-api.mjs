@@ -43,12 +43,21 @@ export function createLeaderboardAPI(DB,levels){
    if(!/^[\p{L}\p{N} _.-]{2,18}$/u.test(name))return json({error:'Use 2–18 letters or numbers for your name.'},400);
    const run=await getRun(data.ticket,id);
    if(!valid(run))return json({error:'Run expired or game updated. Restart for a new run.'},400);
-   if(run.used)return json({error:'This run has already continued.'},409);
-   let result;try{result=validateRun(levels[run.level-1],data.events,'defeat');}catch{return json({error:'Only a defeated run can be submitted.'},400);}
-   const points=run.points+result.score,best=Math.max(run.best_combo,result.best);
-   // A defeat can be saved again after a rescue. The run row stays resumable;
-   // only moving to the next board consumes its ticket. One score row per run.
-   await DB.prepare('INSERT INTO scores(run,player,name,title,level,score,combo,created,ruleset) SELECT id,player,?,?,level,?,?,?,ruleset FROM runs WHERE id=? AND used=0 ON CONFLICT(run) DO UPDATE SET name=excluded.name,title=excluded.title,score=MAX(scores.score,excluded.score),combo=MAX(scores.combo,excluded.combo) WHERE excluded.score>=scores.score').bind(name,title,points,best,Date.now(),run.id).run();
+   const final=data.events?.at(-1)?.type==='end';
+   if(run.used===1)return json({error:'This run has already continued.'},409);
+   let points,best;
+   if(run.used===2){
+    if(!final)return json({error:'This run has ended.'},409);
+    const saved=await DB.prepare('SELECT score,combo FROM scores WHERE run=? AND player=?').bind(run.id,id).first();if(!saved)return json({error:'Score is still syncing. Retry.'},503);
+    await DB.prepare('UPDATE scores SET name=? WHERE run=? AND player=?').bind(name,run.id,id).run();points=saved.score;best=saved.combo;
+   }else{
+    let result;try{result=validateRun(levels[run.level-1],data.events,'defeat');}catch(error){console.warn('Score replay rejected',run.id,error.message);return json({error:'Score could not sync. Please retry.'},400);}
+    points=run.points+result.score;best=Math.max(run.best_combo,result.best);
+    const sql='INSERT INTO scores(run,player,name,title,level,score,combo,created,ruleset) SELECT id,player,?,?,level,?,?,?,ruleset FROM runs WHERE id=? AND used=0 ON CONFLICT(run) DO UPDATE SET name=excluded.name,title=excluded.title,score='+(final?'excluded.score,combo=excluded.combo':'MAX(scores.score,excluded.score),combo=MAX(scores.combo,excluded.combo) WHERE excluded.score>=scores.score');
+    const write=DB.prepare(sql).bind(name,title,points,best,Date.now(),run.id);
+    if(final){await DB.batch([write,DB.prepare('UPDATE runs SET used=2 WHERE id=? AND used=0').bind(run.id)]);const saved=await DB.prepare('SELECT score FROM scores WHERE run=? AND player=?').bind(run.id,id).first();points=saved.score;}
+    else await write.run();
+   }
    const personal=await DB.prepare('SELECT MAX(score) AS best FROM scores WHERE ruleset=? AND player=?').bind(run.ruleset,run.player).first();
    const rank=await DB.prepare('SELECT COUNT(*)+1 AS rank FROM (SELECT MAX(score) AS best FROM scores WHERE ruleset=? GROUP BY player) WHERE best>?').bind(run.ruleset,personal?.best??points).first();
    return json({score:points,rank:rank?.rank||1});

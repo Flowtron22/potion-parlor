@@ -2,13 +2,13 @@
 const COLORS=[{name:'Rose',hex:'#f17b91',symbol:'♡'},{name:'Amber',hex:'#efb74e',symbol:'☀'},{name:'Mint',hex:'#7dcfa4',symbol:'✿'},{name:'Azure',hex:'#69c4e5',symbol:'☾'},{name:'Lilac',hex:'#b89ae6',symbol:'✧'},{name:'Peach',hex:'#ef9f72',symbol:'◇'}];
 const $=id=>document.getElementById(id),canvas=$('game'),ctx=canvas.getContext('2d');
 let dailyMode=false,runDay="",remixedRun=false,spellMode=null,spellUses=0,helpUsed=false,spellWasBlocked=false,spellUIKey='';
-let runLog=[],ranked=true,runTicket=null,runTicketReady=Promise.resolve(null),runPoints=0,runSerial=0,rankConnection='Connecting';
+let runLog=[],ranked=true,runTicket=null,runTicketReady=Promise.resolve(null),runPoints=0,runSerial=0,rankConnection='Connecting';let runStage=1,finalRun=null;
 let state,history=[],effects=[],busy=false,lastTick=0,nextDrawAt=0,time=0,audio,sound=true,modalMode='win',bottleSerial=0,physics=null;
 try{sound=localStorage.getItem('potion-sound')!=='off';}catch{}
 let brewQueue=[],brewTimer=null;
 const bottleMotion=Array.from({length:5},()=>({angle:0,velocity:0,lift:0}));let motionTime=0;
 let slotNodes=[],slotSVGs=[],laneNodes=[],viewDirty=true;const rackMeta=Array(5).fill(null),queueMeta=Array(4).fill(null);
-let savedLevel=1;try{savedLevel=Math.max(1,Math.min(30,Number(localStorage.getItem('potion-cascade-level'))||1));}catch{}
+let savedLevel=1;
 const shuffle=(a,rng=Math.random)=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;};
 const levelCache=new Map();
 let levelWorker=null,loadId=0;
@@ -61,9 +61,11 @@ function render(){
 function snapshot(){return JSON.stringify({logLength:runLog.length,state,effects:effects.map(e=>({...e,start:0})),physics:{settled:physics?.settled||false,quietSteps:physics?.quietSteps||0}});}
 function resetPhysics(){if(state.columns.flat().some(d=>!Number.isFinite(d.drawRadius)||!Number.isFinite(d.y)))layoutGems(state.columns);if(window.GemPhysics){physics??=new window.GemPhysics();physics.reset(state.columns);}for(const m of bottleMotion){m.angle=0;m.velocity=0;m.lift=0;}for(let i=0;i<slotSVGs.length;i++)if(slotSVGs[i]){slotSVGs[i].style.transform='';slotNodes[i].style.setProperty('--slosh','0deg');}}
 function newGame(level=1,prepared,remixed=false,continuing=false){
+ finalRun=null;runStage=continuing?runStage+1:1;if(!continuing)globalThis.PotionTitles?.startRun?.();
  if(brewTimer)clearTimeout(brewTimer);brewTimer=null;brewQueue=[];
  const mode=dailyMode,previous=continuing?{ready:runTicketReady,events:structuredClone(runLog),eligible:ranked}:null;
  runPoints=continuing?runPoints+(state?.scoring?.score||0):0;
+ $('modalAction').classList.remove('hidden');$('modalEndRun').classList.add('hidden');$('modalRestart').onclick=restartGame;
  $('scoreFlash')?.getAnimations?.().forEach(a=>a.cancel());if($('scoreFlash'))$('scoreFlash').textContent='';
  window.potionFluid?.reset();globalThis.PotionEssenceFX?.reset();state=prepared||generate(level);state.essence=[];spellMode=null;spellUses=0;helpUsed=remixed;remixedRun=remixed;state.scoring=PotionScore.fresh();
  runLog=remixed?[{type:'remix'}]:[];ranked=!remixed&&(!previous||previous.eligible);runTicket=null;rankConnection='Connecting';const serial=++runSerial;
@@ -73,7 +75,7 @@ function newGame(level=1,prepared,remixed=false,continuing=false){
 }
 function essenceSource(color){const chip=$('essenceBank')?.querySelector?.('[data-essence-color="'+color+'"]');if(!chip)return{x:180,y:242};const board=canvas.getBoundingClientRect(),r=chip.getBoundingClientRect();return{x:(r.left+r.width/2-board.left)*360/board.width,y:(r.top+r.height/2-board.top)*290/board.height};}
 function renderSpells(){
- const wallet=globalThis.PotionTitles?.status?.(),selecting=!!spellMode,waiting=busy||effects.length>0||!physics?.settled,done=state.brewed===state.bottleCount;
+ const wallet=globalThis.PotionTitles?.status?.(),selecting=!!spellMode,waiting=busy||effects.length>0||!physics?.settled,done=!!finalRun||state.brewed===state.bottleCount;
  const key=[state.level,selecting,waiting,done,spellUses,history.length,wallet?.mana,wallet?.free,(state.essence||[]).map(g=>g.color).join(','),effects.filter(e=>e.stored).map(e=>e.gemId).join(',')].join('|');if(key===spellUIKey)return;spellUIKey=key;
  for(const type of ['dispel','sweep','shuffle']){const button=$(type);if(!button)continue;const price=globalThis.PotionMastery?.prices[type]||Infinity;button.disabled=!wallet||waiting||done||selecting||(type==='dispel'&&wallet.free>0?false:wallet.mana<price);button.title=waiting?'Wait for the gems to settle':(type==='dispel'&&wallet?.free>0?'Free Dispel':`${price} Mana`);}
  $('undo').disabled=!history.length||busy||selecting;
@@ -84,14 +86,14 @@ canvas.classList.toggle('spell-targeting',selecting);
  const rescue=$('rescueSpells');if(rescue){rescue.disabled=waiting||!wallet||(!wallet.free&&wallet.mana<35);rescue.textContent=wallet&&!wallet.free&&wallet.mana<35?'Need 35 Mana for a spell':'Try a spell';}
 }
 function beginSpell(type){
- if(!state||effects.length||!physics?.settled||state.brewed===state.bottleCount)return;
+ if(finalRun||!state||effects.length||!physics?.settled||state.brewed===state.bottleCount)return;
  const wallet=globalThis.PotionTitles?.status?.();if(!wallet||(type==='dispel'&&wallet.free>0?false:wallet.mana<PotionMastery.prices[type]))return;
  spellMode=type;spellWasBlocked=state.over;$('modal').classList.add('hidden');
  $('spellText').textContent=(type==='sweep'?'Choose a color, or tap a gem.':'Tap one gem to dissolve it.')+' Essence saved';renderSpells();canvas.scrollIntoView?.({block:'center'});
 }
 function cancelSpell(){spellMode=null;if(spellWasBlocked)$('modal').classList.remove('hidden');renderSpells();}
 function castSpell(id){
- if(!spellMode||effects.length||!state.columns.flat().some(g=>g.id===id))return false;
+ if(finalRun||!spellMode||effects.length||!state.columns.flat().some(g=>g.id===id))return false;
  const type=spellMode;if(!globalThis.PotionTitles?.spend(type))return false;
  history.push(snapshot());const removed=PotionSpells.dissolve(state,id,type);for(const gem of removed)physics.remove(gem.id);window.potionFluid?.dissolve?.(removed,COLORS[removed[0].color].hex);
  spellUses++;helpUsed=true;state.over=false;spellMode=null;PotionScore.breakChain(state.scoring);runLog.push({type:'spell',spell:type,gem:id});
@@ -129,7 +131,7 @@ function tick(now){
   busy=true;render();return;
  }
  busy=effects.length>0;renderSpells();$('undo').disabled=!history.length||busy;if(busy)return;
- if(state.brewed===state.bottleCount){state.over=true;if(!dailyMode){savedLevel=Math.min(30,state.level+1);try{localStorage.setItem('potion-cascade-level',String(savedLevel));}catch{}}render();showEnd(true);}
+ if(state.brewed===state.bottleCount){state.over=true;if(!dailyMode)savedLevel=state.level%30+1;render();showEnd(true);}
  else if(state.shelf.every(Boolean)||!state.queue.some(t=>PotionRules.exposed(state.queue,t))){state.over=true;PotionScore.breakChain(state.scoring);render();showEnd(false);}
 }
 function completePour(e){
@@ -160,8 +162,8 @@ function draw(now){ const frameStart=window.frameMeter?.begin(now);
  const completed=[];for(const e of effects){const p=Math.min(1,(now-e.start)/e.duration);if(!window.potionFluid?.available){const pose=window.potionSoulPose?.(p,e.from,e.to,e.gemId);ctx.save();if(pose?.phase==='pop'&&!e.stored){ctx.globalAlpha=pose.popScale;orb(e.from.x,e.from.y,{...e,drawRadius:e.radius*pose.popScale,aspect:e.aspect||1,shape:e.shape||0,available:true});}else{ctx.beginPath();for(let j=0;j<=24;j++){const q=Math.max(.16,p-.23)+j/24*(Math.min(.78,p)-Math.max(.16,p-.23)),point=window.potionSoulPose?.(q,e.from,e.to,e.gemId)||{x:e.from.x+(e.to.x-e.from.x)*q,y:e.from.y+(e.to.y-e.from.y)*q};j?ctx.lineTo(point.x,point.y):ctx.moveTo(point.x,point.y);}ctx.lineCap='round';ctx.shadowColor=COLORS[e.color].hex;ctx.shadowBlur=16;ctx.strokeStyle=COLORS[e.color].hex;ctx.lineWidth=6;ctx.globalAlpha=Math.max(0,1-Math.max(0,p-.78)/.22);ctx.stroke();ctx.strokeStyle='#fff6dd';ctx.lineWidth=1.5;ctx.stroke();}ctx.restore();}if(p>=1)completed.push(e);}
  window.potionFluid?.update(now,state.columns,effects,COLORS,physicsChanged||motionActive,bottleMotion);globalThis.PotionEssenceFX?.update(now,effects,COLORS);for(const e of completed){effects.splice(effects.indexOf(e),1);completePour(e);}if($('modal').classList.contains('hidden'))tick(now);finishFrame(now,frameStart);
 }
-function showEnd(won){let resultMedal=0;if(won&&state.scoring){PotionScore.finish(state.scoring,state.level);const medal=PotionScore.medal(state.scoring,helpUsed||!ranked,Math.max(...state.queue.map(t=>t.capacity)));resultMedal=medal;if($('resultMedal'))$('resultMedal').textContent='✦'.repeat(medal);try{const key='potion-medal-'+state.level;localStorage.setItem(key,String(Math.max(medal,Number(localStorage.getItem(key))||0)));}catch{}}else if($('resultMedal'))$('resultMedal').textContent='';render();if($('resultScore')){$('resultScore').textContent=(runPoints+state.scoring.score).toLocaleString();$('submitScore').classList.toggle('hidden',won||!ranked);$('submitStatus').textContent='';$('postScore').disabled=false;$('postScore').textContent='Submit score';}globalThis.PotionTitles?.finish(won,{level:state.level,medal:resultMedal,combo:state.scoring.best,brewed:state.brewed,daily:dailyMode,day:runDay,rescued:helpUsed||!ranked});renderSpells();modalMode=won?'win':'lose';$('modal').classList.toggle('is-defeat',!won);$('modalTitle').textContent=won?'✧':'Brew ruined';$('modalTitle').setAttribute('aria-label',won?'Level completed':'Shelf blocked');$('modalRestart').classList.toggle('hidden',won);$('modalShuffle').classList.toggle('hidden',won);$('modalAction').disabled=!won&&!history.length;$('modalAction').textContent=won?'→':'Undo';$('modalAction').setAttribute('aria-label',won?'Next level':'Undo last bottle');$('modal').classList.remove('hidden');(won?$('modalAction'):$('modalRestart')).focus();}
-function undo(){if(spellMode||!history.length)return;window.potionFluid?.reset();globalThis.PotionEssenceFX?.reset();const saved=JSON.parse(history.pop());state=saved.state;runLog.length=saved.logLength||0;ranked=false;state.over=false;effects=saved.effects.map(e=>({...e,start:performance.now()}));busy=!!effects.length;lastTick=performance.now();resetPhysics();if(physics&&saved.physics){physics.settled=saved.physics.settled;physics.quietSteps=saved.physics.quietSteps;physics.sync();}$('modal').classList.add('hidden');render();}
+function showEnd(won){if(!won){showBlocked();return;}$('modalEndRun').classList.add('hidden');let resultMedal=0;if(won&&state.scoring){PotionScore.finish(state.scoring,state.level);const medal=PotionScore.medal(state.scoring,helpUsed||!ranked,Math.max(...state.queue.map(t=>t.capacity)));resultMedal=medal;if($('resultMedal'))$('resultMedal').textContent='✦'.repeat(medal);try{const key='potion-medal-'+state.level;localStorage.setItem(key,String(Math.max(medal,Number(localStorage.getItem(key))||0)));}catch{}}else if($('resultMedal'))$('resultMedal').textContent='';render();if($('resultScore')){$('resultScore').textContent=(runPoints+state.scoring.score).toLocaleString();$('submitScore').classList.toggle('hidden',won||!ranked);$('submitStatus').textContent='';$('postScore').disabled=false;$('postScore').textContent='Submit score';}globalThis.PotionTitles?.finish(won,{stage:runStage,level:state.level,medal:resultMedal,combo:state.scoring.best,brewed:state.brewed,daily:dailyMode,day:runDay,rescued:helpUsed||!ranked});renderSpells();modalMode=won?'win':'lose';$('modal').classList.toggle('is-defeat',!won);$('modalTitle').textContent=won?'✧':'Brew ruined';$('modalTitle').setAttribute('aria-label',won?'Level completed':'Shelf blocked');$('modalRestart').classList.toggle('hidden',won);$('modalShuffle').classList.toggle('hidden',won);$('modalAction').disabled=!won&&!history.length;$('modalAction').textContent=won?'→':'Undo';$('modalAction').setAttribute('aria-label',won?'Next level':'Undo last bottle');$('modal').classList.remove('hidden');(won?$('modalAction'):$('modalRestart')).focus();}
+function undo(){if(finalRun||spellMode||!history.length)return;window.potionFluid?.reset();globalThis.PotionEssenceFX?.reset();const saved=JSON.parse(history.pop());state=saved.state;runLog.length=saved.logLength||0;state.over=false;effects=saved.effects.map(e=>({...e,start:performance.now()}));busy=!!effects.length;lastTick=performance.now();resetPhysics();if(physics&&saved.physics){physics.settled=saved.physics.settled;physics.quietSteps=saved.physics.quietSteps;physics.sync();}$('modal').classList.add('hidden');render();}
 $('queues').addEventListener('click',e=>{const b=e.target.closest('button[data-tile]');if(b&&!b.disabled)choose(Number(b.dataset.tile));});$('restart').onclick=restartGame;$('undo').onclick=undo;$('sound').onclick=()=>{sound=!sound;try{localStorage.setItem('potion-sound',sound?'on':'off');}catch{}$('sound').setAttribute('aria-pressed',String(sound));$('sound').textContent=sound?'♫':'♪';$('sound').setAttribute('aria-label',sound?'Mute sound':'Enable sound');tone(660,.1);};$('sound').textContent=sound?'♫':'♪';$('sound').setAttribute('aria-label',sound?'Mute sound':'Enable sound');$('sound').setAttribute('aria-pressed',String(sound));$('modalAction').onclick=()=>{if(modalMode==='win')loadLevel(state.level%30+1,false,true);else undo();};
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='z'){e.preventDefault();undo();}});
 // Challenge mode has no gem-drag control: buried colors must fall naturally.
@@ -188,14 +190,15 @@ function showBrewFlash(text,combo=0){
  el.animate?.([{opacity:0,transform:'translateY(14px) scale(.65)',filter:'blur(7px)'},{opacity:1,transform:'translateY(-3px) scale(1.08)',filter:'blur(0)',offset:.12},{opacity:1,transform:'translateY(0) scale(1)',offset:.23},{opacity:1,transform:'translateY(-3px) scale(1.02)',offset:.72},{opacity:0,transform:'translateY(-19px) scale(1.07)',filter:'blur(3px)'}],{duration:2200,fill:'forwards',easing:'ease-out'});
  if(combo>1)brewPoof(combo);
 }
-if($('leaderboard')?.addEventListener&&window.PotionOnline){$('leaderboard').onclick=()=>window.PotionOnline.open(state?.level||1,dailyMode);$('postScore').onclick=async()=>{
- const btn=$('postScore'),serial=runSerial,events=structuredClone(runLog),signature=JSON.stringify(events),ticketReady=runTicketReady;
- const current=()=>serial===runSerial&&state.over&&modalMode==='lose'&&signature===JSON.stringify(runLog);
- if(!current()||!ranked)return;btn.disabled=true;$('submitStatus').textContent='Submitting…';
- try{const ticket=await ticketReady;if(!current())return;if(!ticket)throw Error('Reconnect and replay to rank this run.');const result=await window.PotionOnline.submit(ticket,$('playerName').value,events,globalThis.PotionTitles?.status().rank.name||'Squire');if(!current())return;$('submitStatus').textContent='Saved · #'+result.rank;btn.textContent='Submitted';}
- catch(e){if(current()){$('submitStatus').textContent=e.message;btn.disabled=false;}}
-};}
-
+async function submitFinalScore(automatic=false){
+ const packet=finalRun;if(!packet||!ranked||packet.saving)return;const btn=$('postScore'),current=()=>finalRun===packet&&packet.serial===runSerial;
+ let name=String($('playerName').value||'').normalize('NFKC').trim();if(!/^[\p{L}\p{N} _.-]{2,18}$/u.test(name)){if(automatic)name='Brewer';else{$('submitStatus').textContent='Use 2–18 letters or numbers for your name.';return;}}
+ if(automatic)$('playerName').value=name;packet.saving=true;btn.disabled=true;$('submitStatus').textContent='Saving…';
+ try{const ticket=await packet.ready;if(!ticket)throw Error('Reconnect to save this run.');const result=await window.PotionOnline.submit(ticket,name,packet.events,packet.title);if(!current())return;$('submitStatus').textContent='Saved · #'+result.rank;btn.textContent='Update name';}
+ catch(error){if(current()){$('submitStatus').textContent=error.message;btn.textContent='Retry save';}}
+ finally{packet.saving=false;if(current())btn.disabled=false;}
+}
+if($('leaderboard')?.addEventListener&&window.PotionOnline){$('leaderboard').onclick=()=>window.PotionOnline.open(state?.level||1,dailyMode);$('postScore').onclick=()=>submitFinalScore(false);window.addEventListener('online',()=>{if(finalRun)submitFinalScore(true);});}
 
 document.addEventListener('potion-level',event=>{dailyMode=!!event.detail.daily;loadLevel(event.detail.level||event.detail);});
 $('daily')?.addEventListener('click',()=>{dailyMode=!dailyMode;$('daily').classList.toggle('selected',dailyMode);$('daily').textContent=dailyMode?'Journey':'Daily';loadLevel(dailyMode?PotionChallenge.level():savedLevel);});
@@ -211,11 +214,29 @@ canvas.addEventListener('click',e=>{if(!spellMode)return;const r=canvas.getBound
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&spellMode)cancelSpell();});
 
 function shuffleCurrent(){
- if(!state||effects.length||!physics?.settled||state.brewed===state.bottleCount||!state.columns.flat().length||!globalThis.PotionTitles?.spend('shuffle'))return false;
+ if(finalRun||!state||effects.length||!physics?.settled||state.brewed===state.bottleCount||!state.columns.flat().length||!globalThis.PotionTitles?.spend('shuffle'))return false;
  history.push(snapshot());const seed=Math.floor(Math.random()*4294967296);PotionSpells.shuffle(state.columns,seed);spellUses++;helpUsed=true;state.over=false;spellMode=null;runLog.push({type:'spell',spell:'shuffle',seed});PotionScore.breakChain(state.scoring);$('modal').classList.add('hidden');resetPhysics();flashScore('MIX IT UP!');tone(550,.14);render();return true;
 }
 $('shuffle')?.addEventListener('click',shuffleCurrent);
 $('modalShuffle')?.addEventListener('click',shuffleCurrent);
-$('modalRestart')?.addEventListener('click',restartGame);
 
-document.addEventListener('potion:rank-reset',()=>{dailyMode=false;savedLevel=1;try{localStorage.setItem('potion-cascade-level','1');}catch{}loadLevel(1);});
+
+document.addEventListener('potion:rank-reset',()=>{dailyMode=false;savedLevel=1;loadLevel(1);});
+
+function showBlocked(){
+ state.over=true;render();globalThis.PotionTitles?.finish(false,{stage:runStage,level:state.level,brewed:state.brewed,daily:dailyMode,day:runDay,rescued:true});
+ modalMode='rescue';$('modal').classList.add('is-defeat');$('modalTitle').textContent='Shelf blocked';$('resultGreeting').textContent='One more chance, '+(globalThis.PotionTitles?.status().rank.name||'Squire')+'.';
+ $('resultScore').textContent=(runPoints+state.scoring.score).toLocaleString();$('submitScore').classList.toggle('hidden',true);$('resultMedal').textContent='';$('rankCelebration').classList.add('hidden');
+ $('rescueSpells').classList.remove('hidden');$('modalRestart').classList.add('hidden');$('modalEndRun').classList.remove('hidden');$('modalShuffle').classList.remove('hidden');$('modalAction').textContent='Undo';$('modalAction').disabled=!history.length;$('modalAction').setAttribute('aria-label','Undo last bottle');renderSpells();$('modal').classList.remove('hidden');$('modalEndRun').focus();
+ const wallet=globalThis.PotionTitles?.status?.();if(!history.length&&(!state.columns.flat().length||!wallet||!wallet.free&&wallet.mana<15))endRun();
+}
+function endRun(){
+ if(finalRun||!state.over||effects.length||modalMode!=='rescue')return false;
+ const reached=globalThis.PotionTitles?.status?.(),title=reached?.rank.name||'Squire';runLog.push({type:'end'});
+ finalRun={serial:runSerial,title,events:structuredClone(runLog),ready:runTicketReady,saving:false};modalMode='lose';history=[];spellMode=null;
+ globalThis.PotionTitles?.endRun?.();savedLevel=1;$('modalTitle').textContent='Run over';$('resultGreeting').textContent='Final rank: '+title;$('resultMastery').textContent='';$('resultMastery').classList.add('hidden');
+ $('submitScore').classList.toggle('hidden',!ranked);$('postScore').textContent='Save score';$('postScore').disabled=false;$('submitStatus').textContent='';
+ for(const id of ['rescueSpells','modalShuffle','modalEndRun','modalAction'])$(id).classList.add('hidden');$('modalRestart').classList.remove('hidden');$('modalRestart').onclick=()=>loadLevel(dailyMode?PotionChallenge.level():1);$('modalRestart').focus();renderSpells();
+ if(ranked&&window.PotionOnline)submitFinalScore(true);return true;
+}
+$('modalEndRun').onclick=endRun;

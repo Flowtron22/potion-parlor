@@ -3,12 +3,13 @@ import {PotionScore} from './scoring.mjs';
 import {PotionRules} from './rules.mjs';
 import {PotionSpells} from './spells.mjs';
 export function validateRun(board,events,outcome='win'){
- if(!['win','defeat'].includes(outcome)||!Array.isArray(events)||events.length>board.total*3+board.bottleCount+256)throw Error('Invalid action count');
- const queue=structuredClone(board.queue),shelf=Array(board.slots).fill(null),world=new GemPhysics(),score=PotionScore.fresh(),pending=new Map(),original=new Map(board.columns.flat().map(g=>[g.id,g])),claimed=new Set();let brewed=0,placed=0,drawn=0,spells=0;const essence=new Map(),physical=new Map([...original.keys()].map(id=>[id,id]));
+ if(!['win','defeat'].includes(outcome)||!Array.isArray(events)||events.length>board.total*3+board.bottleCount+257)throw Error('Invalid action count');
+ const queue=structuredClone(board.queue),shelf=Array(board.slots).fill(null),world=new GemPhysics(),score=PotionScore.fresh(),pending=new Map(),original=new Map(board.columns.flat().map(g=>[g.id,g])),claimed=new Set();let brewed=0,placed=0,drawn=0,spells=0,ended=false;const essence=new Map(),physical=new Map([...original.keys()].map(id=>[id,id]));
  function removePhysical(id,body){const own=physical.get(id);if(own!==body){const other=[...physical].find(([key,value])=>value===body);if(other)physical.set(other[0],own);}physical.delete(id);world.remove(body); }
  world.reset(structuredClone(board.columns));world.settle(3600);
  for(const [index,event] of events.entries()){
-  if(event.type==='spell'){
+  if(event.type==='end'){if(outcome!=='defeat'||index!==events.length-1||pending.size||brewed===board.bottleCount)throw Error('Invalid run finish');ended=true;
+  }else if(event.type==='spell'){
    if(pending.size||++spells>256||!['dispel','sweep','shuffle'].includes(event.spell))throw Error('Invalid spell');
    if(event.spell==='shuffle'){
     if(!Number.isInteger(event.seed)||event.seed<0||event.seed>4294967295||!physical.size)throw Error('Invalid shuffle seed');
@@ -50,8 +51,8 @@ export function validateRun(board,events,outcome='win'){
   }else throw Error('Invalid action');
  }
  if(outcome==='defeat'){
-  if(pending.size||brewed===board.bottleCount||PotionRules.plan(shelf,[...essence.values(),...world.bottom()]).length||
-   (shelf.includes(null)&&queue.some(t=>PotionRules.exposed(queue,t))))throw Error('Run is not defeated');
+  if(pending.size||brewed===board.bottleCount||!ended&&(PotionRules.plan(shelf,[...essence.values(),...world.bottom()]).length||
+   (shelf.includes(null)&&queue.some(t=>PotionRules.exposed(queue,t)))))throw Error('Run is not defeated');
   PotionScore.breakChain(score);
  }else{
   if(world.bodies.size||essence.size||pending.size||drawn!==board.total||placed!==board.bottleCount||brewed!==board.bottleCount)throw Error('Incomplete run');

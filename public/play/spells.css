@@ -12,3 +12,5 @@
 @media(prefers-reduced-motion:reduce){.essence-flight{filter:none}}
 
 .game #game{aspect-ratio:360/300}.slot.essence-replaced{display:none}.rack>.essence-bank{margin:0;min-width:0;height:74px;align-content:center;align-self:stretch;padding:6px;gap:4px;overflow-y:auto;scrollbar-width:thin}.rack>.essence-bank:before{font-size:9px;letter-spacing:0}.rack>.essence-bank span{font-size:10px;padding:3px 4px;gap:3px}.rack>.essence-bank .essence-reservoir{width:9px;height:14px}@media(max-width:600px){.rack>.essence-bank{height:68px}}
+
+.modal-end-run{width:100%;margin:0 0 10px;padding:11px;border:1px solid #c4a3b077;border-radius:10px;background:#5a3e4c;color:#f4e6ef;font-weight:600}#modal.is-defeat .modal-end-run{background:#694657;border-color:#bb91a6}
