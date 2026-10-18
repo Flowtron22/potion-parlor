@@ -1,6 +1,6 @@
 import * as THREE from './vendor/three.module.min.js';
 import {LiquidSurface} from './liquid-physics.mjs';
-import {PavelFluid} from './pavel-fluid.mjs';
+import {PavelFluid,FLOW_TRAVEL_SECONDS} from './pavel-fluid.mjs?v=outlet2';
 
 // Pavel Dobryakov's velocity/dye fluid solver drives both pours and bottle mixing.
 const fluidVertex=`varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`;
@@ -70,17 +70,18 @@ class LiquidScene {
    for(const [id,group] of this.meshes){if(!live.has(id)){this.scene.remove(group);group.children[1].material.dispose();this.meshes.delete(id);}}
    const active=new Set();
    for(const e of effects){
-     active.add(e);let stream=this.jets.get(e);if(!stream){stream=this.streamPool.pop()||this.makeStream();stream.solver.clear();this.jets.set(e,stream);}
+     active.add(e);let stream=this.jets.get(e);if(!stream){stream=this.streamPool.pop()||this.makeStream();stream.solver.clear();stream.lastNow=e.start;this.jets.set(e,stream);}
      const p=Math.max(0,Math.min(1,(now-e.start)/e.duration)),m=motions[e.slot];let target=this.targets[e.slot]||{x:e.to.x*this.scaleX,y:this.height-30};
      if(m)target={...target,x:target.x+(target.neck||0)*Math.sin(m.angle),y:target.y+(target.neck||0)*(1-Math.cos(m.angle))+m.lift};
      const source={x:e.from.x*this.scaleX,y:e.from.y*this.scaleY},left=Math.min(source.x,target.x)-24,top=source.y-12,w=Math.abs(source.x-target.x)+48,h=Math.max(40,target.y-source.y+24);
      const inlet={x:(source.x-left)/w,y:1-(source.y-top)/h},outlet={x:(target.x-left)/w,y:1-(target.y-top)/h};
      const color=new THREE.Color(colors[e.color].hex);
-     if(p<.60)stream.solver.inject({x:inlet.x,y:inlet.y,color,radius:Math.pow(3.1/h,2),amount:1.25*dt*60,aspectRatio:w/h});
-     stream.solver.step(dt,{source:inlet,target:outlet,time:t});const uniforms=stream.mesh.material.uniforms;
+     const flowDt=Math.min(.1,Math.max(0,(now-stream.lastNow)/1000));stream.lastNow=now;
+     if(p<.60)stream.solver.inject({x:inlet.x,y:inlet.y,color,radius:Math.pow(3.1/h,2),amount:1.25*flowDt*60,aspectRatio:w/h});
+     stream.solver.step(flowDt,{source:inlet,target:outlet,time:t});const uniforms=stream.mesh.material.uniforms;
      uniforms.uDye.value=stream.solver.texture;uniforms.uSource.value.set(inlet.x,inlet.y);uniforms.uTarget.value.set(outlet.x,outlet.y);uniforms.uSize.value.set(w,h);uniforms.uFade.value=1-Math.max(0,(p-.93)/.07);
      stream.mesh.visible=true;stream.mesh.scale.set(w,h,1);stream.mesh.position.set(left+w/2,this.height-top-h/2,85);
-     e.delivered=Math.max(0,Math.min(1,(p-.27)/.66));
+     e.delivered=Math.max(0,Math.min(1,((now-e.start)/1000-FLOW_TRAVEL_SECONDS)/(.60*e.duration/1000)));
    }
    for(const [e,stream] of this.jets)if(!active.has(e)){stream.mesh.visible=false;this.jets.delete(e);this.streamPool.push(stream);}
    this.surfaceActive=false;
@@ -110,4 +111,4 @@ class LiquidScene {
 
  reset(){for(const stream of this.jets.values()){stream.mesh.visible=false;this.streamPool.push(stream);}this.jets.clear();for(let i=0;i<this.vessels.length;i++)this.releaseVessel(i);this.surfaces=[];this.surfaceActive=false;this.previousTime=0;this.dirty=true;this.splashes=[];this.seen=new WeakSet();for(const group of this.meshes.values()){this.scene.remove(group);group.children[1].material.dispose();}this.meshes.clear();}
 }
-try{window.potionFluid=new LiquidScene();document.documentElement.dataset.liquid='three';document.documentElement.dataset.fluidEngine='pavel-dobryakov';}catch(error){document.querySelector('.fluid-layer')?.remove();document.documentElement.dataset.liquid='canvas';console.warn('Liquid rendering uses the Canvas fallback.',error.message);}
+try{window.potionFluid=new LiquidScene();document.documentElement.dataset.liquid='three';document.documentElement.dataset.fluidEngine='pavel-dobryakov';document.documentElement.dataset.fluidBuild='outlet2';}catch(error){document.querySelector('.fluid-layer')?.remove();document.documentElement.dataset.liquid='canvas';console.warn('Liquid rendering uses the Canvas fallback.',error.message);}

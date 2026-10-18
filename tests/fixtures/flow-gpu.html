@@ -1,0 +1,29 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>GPU pour outlet regression</title>
+<style>body{background:#102a23;color:#e9e0be;font:16px system-ui;padding:20px}canvas{width:220px;height:220px;border:1px solid #55756b}li{margin:12px 0}.fail{color:#ff9898}.pass{color:#a0e4af}</style>
+<h1>GPU pour outlet regression</h1><p id="status">Running real GPU readbacks…</p><ol id="results"></ol>
+<script type="module">
+import * as THREE from '../../public/play/vendor/three.module.min.js';
+import {PavelFluid} from '../../public/play/pavel-fluid.mjs?outlet-check';
+const renderer=new THREE.WebGLRenderer({alpha:true});renderer.setSize(192,192);renderer.setClearColor(0,0);document.body.append(renderer.domElement);
+const cases=[['vertical / 60 fps',.5,.5,60],['left / 60 fps',.85,.15,60],['right / 30 fps',.15,.85,30],['left / 15 fps',.85,.15,15]];
+let failures=0;
+for(const [label,sx,tx,fps] of cases){
+ const line=document.createElement('li');line.textContent=label+'…';document.getElementById('results').append(line);
+ const fluid=new PavelFluid(renderer,{guided:true,width:96,height:128,dyeWidth:192,dyeHeight:192,storageType:THREE.FloatType});
+ const source={x:sx,y:.88},target={x:tx,y:.12},color=new THREE.Color('#73c9f0'),buffer=new Float32Array(192*192*4);let peak=0,firstArrival=null,late=0,upstream=0;
+ for(let frame=1;frame<=Math.ceil(fps*1.15);frame++){
+  const time=frame/fps;if(time<.66)fluid.inject({x:sx,y:source.y,color,amount:1.25*60/fps,radius:.0006});
+  fluid.step(1/fps,{source,target,time});renderer.readRenderTargetPixels(fluid.dye.read,0,0,192,192,buffer);
+  let neck=0;for(let y=Math.ceil(target.y*192);y<=Math.ceil(target.y*192)+5;y++)for(let x=Math.round(tx*192)-8;x<=Math.round(tx*192)+8;x++){const i=(y*192+x)*4;neck=Math.max(neck,buffer[i],buffer[i+1],buffer[i+2]);}
+  if(neck>.04&&firstArrival===null)firstArrival=time;peak=Math.max(peak,neck);if(time<.20)upstream=Math.max(upstream,neck);if(time>1.05)late=Math.max(late,neck);
+  if(frame%8===0)await new Promise(requestAnimationFrame);
+ }
+ const ok=peak>.12&&firstArrival!==null&&firstArrival<.46&&upstream<.03&&late<peak*.2;
+ line.className=ok?'pass':'fail';line.textContent=(ok?'PASS ':'FAIL ')+label+': neck peak '+peak.toFixed(3)+', arrival '+(firstArrival?.toFixed(3)||'never')+' s, before arrival '+upstream.toFixed(3)+', drained '+late.toFixed(3);if(!ok)failures++;
+ fluid.dispose();
+}
+document.getElementById('status').textContent=failures?failures+' failed cases':'PASS: all pours reach the neck, do not arrive early, and drain after the emitter stops.';
+document.documentElement.dataset.result=failures?'fail':'pass';renderer.dispose();
+</script></html>
+
+

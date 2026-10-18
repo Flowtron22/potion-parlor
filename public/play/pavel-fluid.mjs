@@ -2,6 +2,7 @@
 // WebGL-Fluid-Simulation. The original seven passes live in vendor/pavel-fluid.
 import * as THREE from './vendor/three.module.min.js';
 import * as upstream from './vendor/pavel-fluid/shaders.mjs';
+export const FLOW_TRAVEL_SECONDS=.30;
 
 const vertex=`varying vec2 vUv,vL,vR,vT,vB;uniform vec2 texelSize;
 void main(){vUv=position.xy*.5+.5;vL=vUv-vec2(texelSize.x,0.);vR=vUv+vec2(texelSize.x,0.);vT=vUv+vec2(0.,texelSize.y);vB=vUv-vec2(0.,texelSize.y);gl_Position=vec4(position.xy,0.,1.);}`;
@@ -9,6 +10,22 @@ const boundary=`uniform sampler2D uMask;uniform float uUseMask,uLevel;
 bool solid(vec2 uv){return uUseMask>.5&&(uv.x<0.||uv.x>1.||uv.y<0.||uv.y>uLevel||texture2D(uMask,uv).a<.5);}
 `;
 function masked(name,source){
+ if(name==='advection'){
+  // An open inlet/outlet needs through-flow. Projecting the entire prescribed
+  // jet in a closed box cancels it and leaves dye suspended near the source.
+  // Transport in an exact, divergence-free background flow; the projected
+  // velocity texture retains the independently simulated eddies.
+  const transport=`uniform float openFlow,flowDelta,emitDye,inletRadius,inletAspect;uniform vec2 flowInlet,flowOutlet;uniform vec3 inletColor;
+vec2 transport(vec2 uv,vec2 velocity){vec2 coord=uv-dt*velocity*texelSize;
+ if(openFlow>.5){float dy=min(-.001,flowOutlet.y-flowInlet.y);float q=(uv.y-flowInlet.y)/dy,dq=flowDelta/${FLOW_TRAVEL_SECONDS.toFixed(2)};float bend=q*(2.-q),previous=(q-dq)*(2.-q+dq);coord-=vec2((flowOutlet.x-flowInlet.x)*(bend-previous),dy*dq);}
+ return coord;}
+`;
+  source=source.replace('void main () {',transport+'\nvoid main () {\nif(openFlow>.5&&vUv.y<flowOutlet.y){gl_FragColor=vec4(0.);return;}');
+  source=source.replace('vUv - dt * bilerp(uVelocity, vUv, texelSize).xy * texelSize','transport(vUv,bilerp(uVelocity,vUv,texelSize).xy)').replace('vUv - dt * texture2D(uVelocity, vUv).xy * texelSize','transport(vUv,texture2D(uVelocity,vUv).xy)');
+  source=source.replace('float decay =',`if(emitDye>.5){float dy=min(-.001,flowOutlet.y-flowInlet.y),q=(vUv.y-flowInlet.y)/dy;
+ if(q>=0.&&q<=flowDelta/${FLOW_TRAVEL_SECONDS.toFixed(2)}){float center=mix(flowInlet.x,flowOutlet.x,q*(2.-q)),across=(vUv.x-center)*inletAspect;float weight=exp(-across*across/max(.000001,inletRadius));result.rgb=mix(result.rgb,inletColor,weight);}}
+float decay =`);
+ }
  source=source.replace('void main () {','void main () {\nif(solid(vUv)){gl_FragColor=vec4(0.);return;}');
  if(name==='divergence')source=source.replace('float div =',`if(solid(vL))L=-C.x;if(solid(vR))R=-C.x;if(solid(vT))T=-C.y;if(solid(vB))B=-C.y;\nfloat div =`);
  if(name==='pressure')source=source.replace('float divergence =',`if(solid(vL))L=C;if(solid(vR))R=C;if(solid(vT))T=C;if(solid(vB))B=C;\nfloat divergence =`);
@@ -18,35 +35,35 @@ function masked(name,source){
 const force=`varying vec2 vUv;uniform sampler2D uVelocity;uniform float dt,uTime,uGuided;uniform vec2 uSource,uTarget,uResolution;
 void main(){if(solid(vUv)){gl_FragColor=vec4(0.);return;}vec2 v=texture2D(uVelocity,vUv).xy;
  if(uGuided>.5){float q=clamp((vUv.y-uSource.y)/min(-.001,uTarget.y-uSource.y),0.,1.);float center=mix(uSource.x,uTarget.x,q*(2.-q));float dy=uTarget.y-uSource.y;
-  vec2 tangent=vec2(2.*(uTarget.x-uSource.x)*(1.-q),dy);vec2 desired=tangent*uResolution*2.65;
-  float near=exp(-pow((vUv.x-center)*uResolution.x/9.,2.));v=mix(v,desired,near*(1.-exp(-dt*35.)));v.x+=sin(q*16.+uTime*7.)*near*dt*6.;
+  float near=exp(-pow((vUv.x-center)*uResolution.x/9.,2.));v.x+=sin(q*16.+uTime*7.)*near*dt*6.;
  }else{v.y-=dt*18.;}
  gl_FragColor=vec4(clamp(v,vec2(-900.),vec2(900.)),0.,1.);}`;
 const clear=`varying vec2 vUv;uniform sampler2D uTexture;uniform float value;void main(){gl_FragColor=texture2D(uTexture,vUv)*value;}`;
 const geometry=new THREE.PlaneGeometry(2,2);
 
 export class PavelFluid {
- constructor(renderer,{width=80,height=112,dyeWidth=192,dyeHeight=256,mask=null,guided=false}={}){
+ constructor(renderer,{width=80,height=112,dyeWidth=192,dyeHeight=256,mask=null,guided=false,storageType=THREE.HalfFloatType}={}){
   if(!renderer.extensions.has('EXT_color_buffer_float'))throw Error('Floating-point fluid buffers unavailable');
-  this.renderer=renderer;this.width=width;this.height=height;this.mask=mask;this.guided=guided;this.steps=0;this.disposed=false;
+  this.renderer=renderer;this.width=width;this.height=height;this.mask=mask;this.guided=guided;this.storageType=storageType;this.steps=0;this.disposed=false;
   this.scene=new THREE.Scene();this.camera=new THREE.Camera();this.mesh=new THREE.Mesh(geometry);this.mesh.frustumCulled=false;this.mesh.material.dispose();this.scene.add(this.mesh);this.materials={};this.targets=[];
   this.velocity=this.double(width,height);this.dye=this.double(dyeWidth,dyeHeight);this.pressure=this.double(width,height);this.divergence=this.target(width,height);this.curl=this.target(width,height);
   for(const [name,source] of Object.entries(upstream))this.materials[name]=this.material(masked(name,source),name==='advection');
   this.materials.force=this.material(boundary+force);this.materials.clear=this.material(clear);this.clear();
  }
- target(width,height){const target=new THREE.WebGLRenderTarget(width,height,{type:THREE.HalfFloatType,format:THREE.RGBAFormat,minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter,depthBuffer:false,stencilBuffer:false});target.texture.generateMipmaps=false;this.targets.push(target);return target;}
+ target(width,height){const target=new THREE.WebGLRenderTarget(width,height,{type:this.storageType,format:THREE.RGBAFormat,minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter,depthBuffer:false,stencilBuffer:false});target.texture.generateMipmaps=false;this.targets.push(target);return target;}
  double(w,h){const a=this.target(w,h),b=this.target(w,h);return{read:a,write:b,swap(){[this.read,this.write]=[this.write,this.read];}};}
- material(fragment,manual=false){return new THREE.ShaderMaterial({vertexShader:vertex,fragmentShader:fragment,defines:manual?{MANUAL_FILTERING:''}:{},depthTest:false,depthWrite:false,blending:THREE.NoBlending,uniforms:{texelSize:{value:new THREE.Vector2(1/this.width,1/this.height)},uUseMask:{value:this.mask?1:0},uMask:{value:this.mask},uLevel:{value:1}}});}
- run(name,target,values={}){const material=this.materials[name];for(const [key,value] of Object.entries(values)){if(!material.uniforms[key])material.uniforms[key]={value};else material.uniforms[key].value=value;}this.mesh.material=material;this.renderer.setRenderTarget(target);this.renderer.render(this.scene,this.camera);}
- clear(){const previous=this.renderer.getRenderTarget(),color=this.renderer.getClearColor(new THREE.Color()),alpha=this.renderer.getClearAlpha();this.renderer.setClearColor(0,0);for(const target of this.targets){this.renderer.setRenderTarget(target);this.renderer.clear();}this.renderer.setClearColor(color,alpha);this.renderer.setRenderTarget(previous);}
+ material(fragment,manual=false){return new THREE.ShaderMaterial({vertexShader:vertex,fragmentShader:fragment,defines:manual?{MANUAL_FILTERING:''}:{},depthTest:false,depthWrite:false,blending:THREE.NoBlending,uniforms:{emitDye:{value:0},inletColor:{value:new THREE.Vector3()},inletRadius:{value:.001},inletAspect:{value:1},texelSize:{value:new THREE.Vector2(1/this.width,1/this.height)},uUseMask:{value:this.mask?1:0},uMask:{value:this.mask},uLevel:{value:1}}});}
+ run(name,target,values={}){const material=this.materials[name];for(const [key,value] of Object.entries(values)){if(!material.uniforms[key])material.uniforms[key]={value};else material.uniforms[key].value=value;}material.uniformsNeedUpdate=true;this.mesh.material=material;this.renderer.setRenderTarget(target);this.renderer.render(this.scene,this.camera);}
+ clear(){this.inflow=null;const previous=this.renderer.getRenderTarget(),color=this.renderer.getClearColor(new THREE.Color()),alpha=this.renderer.getClearAlpha();this.renderer.setClearColor(0,0);for(const target of this.targets){this.renderer.setRenderTarget(target);this.renderer.clear();}this.renderer.setClearColor(color,alpha);this.renderer.setRenderTarget(previous);}
  setLevel(level){for(const material of Object.values(this.materials))if(material.uniforms.uLevel)material.uniforms.uLevel.value=level;}
  inject({x,y,vx=0,vy=0,color,radius=.0008,amount=.2,aspectRatio=this.width/this.height}){
   const common={point:new THREE.Vector2(x,y),aspectRatio,radius};
   if(vx||vy){this.run('splat',this.velocity.write,{...common,uTarget:this.velocity.read.texture,color:new THREE.Vector3(vx,vy,0)});this.velocity.swap();}
+  if(this.guided){this.inflow={color,amount,radius,aspectRatio};return;}
   this.run('splat',this.dye.write,{...common,uTarget:this.dye.read.texture,color:new THREE.Vector3(color.r*amount,color.g*amount,color.b*amount)});this.dye.swap();
  }
  step(dt,{source={x:.5,y:.9},target={x:.5,y:.1},time=0}={}){
-  dt=Math.min(1/30,Math.max(1/240,dt));const texel=new THREE.Vector2(1/this.width,1/this.height);
+  const flowDelta=Math.min(.1,Math.max(0,dt));dt=Math.min(1/30,Math.max(1/240,dt));const texel=new THREE.Vector2(1/this.width,1/this.height),flow={openFlow:this.guided?1:0,flowDelta,flowInlet:new THREE.Vector2(source.x,source.y),flowOutlet:new THREE.Vector2(target.x,target.y)};
   this.run('force',this.velocity.write,{uVelocity:this.velocity.read.texture,dt,uTime:time,uGuided:this.guided?1:0,uSource:new THREE.Vector2(source.x,source.y),uTarget:new THREE.Vector2(target.x,target.y),uResolution:new THREE.Vector2(this.width,this.height)});this.velocity.swap();
   this.run('curl',this.curl,{uVelocity:this.velocity.read.texture});
   this.run('vorticity',this.velocity.write,{uVelocity:this.velocity.read.texture,uCurl:this.curl.texture,curl:this.guided?10:22,dt});this.velocity.swap();
@@ -54,8 +71,9 @@ export class PavelFluid {
   this.run('clear',this.pressure.write,{uTexture:this.pressure.read.texture,value:.8});this.pressure.swap();
   for(let i=0;i<14;i++){this.run('pressure',this.pressure.write,{uPressure:this.pressure.read.texture,uDivergence:this.divergence.texture});this.pressure.swap();}
   this.run('gradientSubtract',this.velocity.write,{uPressure:this.pressure.read.texture,uVelocity:this.velocity.read.texture});this.velocity.swap();
-  this.run('advection',this.velocity.write,{uVelocity:this.velocity.read.texture,uSource:this.velocity.read.texture,texelSize:texel,dyeTexelSize:texel,dt,dissipation:1.2});this.velocity.swap();
-  this.run('advection',this.dye.write,{uVelocity:this.velocity.read.texture,uSource:this.dye.read.texture,texelSize:texel,dyeTexelSize:new THREE.Vector2(1/this.dye.read.width,1/this.dye.read.height),dt,dissipation:this.guided?1.5:.35});this.dye.swap();this.steps++;
+  this.run('advection',this.velocity.write,{...flow,emitDye:0,uVelocity:this.velocity.read.texture,uSource:this.velocity.read.texture,texelSize:texel,dyeTexelSize:texel,dt,dissipation:1.2});this.velocity.swap();
+  const inlet=this.inflow,rate=inlet?inlet.amount/Math.max(.001,flowDelta*60):0;
+  this.run('advection',this.dye.write,{...flow,emitDye:inlet?1:0,inletColor:inlet?new THREE.Vector3(inlet.color.r*rate,inlet.color.g*rate,inlet.color.b*rate):new THREE.Vector3(),inletRadius:inlet?.radius||.001,inletAspect:inlet?.aspectRatio||1,uVelocity:this.velocity.read.texture,uSource:this.dye.read.texture,texelSize:texel,dyeTexelSize:new THREE.Vector2(1/this.dye.read.width,1/this.dye.read.height),dt,dissipation:this.guided?1.5:.35});this.dye.swap();this.inflow=null;this.steps++;
  }
  get texture(){return this.dye.read.texture;}
  dispose(){if(this.disposed)return;this.disposed=true;for(const target of this.targets)target.dispose();for(const material of Object.values(this.materials))material.dispose();this.mask?.dispose();}
