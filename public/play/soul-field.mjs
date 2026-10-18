@@ -1,7 +1,7 @@
 import * as THREE from './vendor/three.module.min.js';
 import {PavelFluid} from './pavel-fluid.mjs?v=soul5';
 import * as post from './vendor/pavel-fluid/post.mjs';
-import {SOUL_SETTINGS as S,soulPose,SOUL_ARRIVAL} from './soul-motion.mjs';
+import {SOUL_SETTINGS as S,soulPose,SOUL_ARRIVAL} from './soul-motion.mjs?v=swirl7';
 
 const vertex=`varying vec2 vUv,vL,vR,vT,vB;uniform vec2 texelSize;void main(){vUv=position.xy*.5+.5;vL=vUv-vec2(texelSize.x,0.);vR=vUv+vec2(texelSize.x,0.);vT=vUv+vec2(0.,texelSize.y);vB=vUv-vec2(0.,texelSize.y);gl_Position=vec4(position.xy,0.,1.);}`;
 const displayVertex=`varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`;

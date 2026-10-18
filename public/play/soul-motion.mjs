@@ -1,5 +1,5 @@
 // Values read from the supplied WebGL Fluid Simulation settings screenshot.
-export const SOUL_SETTINGS=Object.freeze({simResolution:128,dyeResolution:1024,densityDissipation:4,velocityDissipation:0,pressure:0,curl:0,splatRadius:.04,shading:true,bloomIntensity:2,bloomThreshold:1,sunraysWeight:1});
+export const SOUL_SETTINGS=Object.freeze({simResolution:32,dyeResolution:128,densityDissipation:4,velocityDissipation:4,pressure:1,curl:50,splatRadius:.01,shading:true,bloomIntensity:2,bloomThreshold:1,sunraysWeight:1});
 export const POP_END=.16,SOUL_ARRIVAL=.78;
 const clamp=n=>Math.max(0,Math.min(1,n));
 export function soulPose(progress,source,target,seed=0){

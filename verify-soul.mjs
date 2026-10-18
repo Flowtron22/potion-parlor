@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {soulPose,SOUL_SETTINGS as S,POP_END,SOUL_ARRIVAL} from './public/play/soul-motion.mjs';
-assert.equal(S.simResolution,128);assert.equal(S.dyeResolution,1024);assert.equal(S.densityDissipation,4);assert.equal(S.velocityDissipation,0);assert.equal(S.pressure,0);assert.equal(S.curl,0);assert.equal(S.splatRadius,.04);assert.equal(S.bloomIntensity,2);assert.equal(S.bloomThreshold,1);assert.equal(S.sunraysWeight,1);
+assert.equal(S.simResolution,32);assert.equal(S.dyeResolution,128);assert.equal(S.densityDissipation,4);assert.equal(S.velocityDissipation,4);assert.equal(S.pressure,1);assert.equal(S.curl,50);assert.equal(S.splatRadius,.01);assert.equal(S.bloomIntensity,2);assert.equal(S.bloomThreshold,1);assert.equal(S.sunraysWeight,1);
 for(const [source,target]of [[{x:50,y:220},{x:310,y:320}],[{x:310,y:220},{x:50,y:320}],[{x:180,y:220},{x:180,y:320}]]){
  let delivered=0;
  for(let i=0;i<=1000;i++){const p=i/1000,pose=soulPose(p,source,target);assert(Number.isFinite(pose.x)&&Number.isFinite(pose.y));assert(pose.delivered>=delivered);delivered=pose.delivered;if(p<SOUL_ARRIVAL)assert.equal(pose.delivered,0);if(p>=POP_END)assert.equal(pose.popScale,0);}

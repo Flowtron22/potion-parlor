@@ -1,8 +1,8 @@
 import * as THREE from './vendor/three.module.min.js';
 import {LiquidSurface} from './liquid-physics.mjs';
 import {PavelFluid} from './pavel-fluid.mjs?v=soul5';
-import {SoulField} from './soul-field.mjs?v=soul5';
-import {soulPose,POP_END} from './soul-motion.mjs';
+import {SoulField} from './soul-field.mjs?v=swirl7';
+import {soulPose,POP_END} from './soul-motion.mjs?v=swirl7';
 window.potionSoulPose=soulPose;
 
 // Pavel Dobryakov's velocity/dye fluid solver drives both pours and bottle mixing.
@@ -113,4 +113,4 @@ class LiquidScene {
 
  reset(){this.soul.clear();for(const pop of this.departures.values()){this.scene.remove(pop.gem,pop.ring);pop.gem.material.dispose();pop.ring.material.dispose();}this.departures.clear();for(let i=0;i<this.vessels.length;i++)this.releaseVessel(i);this.surfaces=[];this.surfaceActive=false;this.previousTime=0;this.dirty=true;this.splashes=[];this.seen=new WeakSet();for(const group of this.meshes.values()){this.scene.remove(group);group.children[1].material.dispose();}this.meshes.clear();}
 }
-try{window.potionFluid=new LiquidScene();document.documentElement.dataset.liquid='three';document.documentElement.dataset.fluidEngine='pavel-dobryakov';document.documentElement.dataset.fluidBuild='wide6';}catch(error){document.querySelector('.fluid-layer')?.remove();document.documentElement.dataset.liquid='canvas';console.warn('Liquid rendering uses the Canvas fallback.',error.message);}
+try{window.potionFluid=new LiquidScene();document.documentElement.dataset.liquid='three';document.documentElement.dataset.fluidEngine='pavel-dobryakov';document.documentElement.dataset.fluidBuild='swirl7';}catch(error){document.querySelector('.fluid-layer')?.remove();document.documentElement.dataset.liquid='canvas';console.warn('Liquid rendering uses the Canvas fallback.',error.message);}
