@@ -19,3 +19,9 @@ Undo, jar shake and remixed restarts retain their existing practice eligibility 
 Fixed the hidden two-spell cap that disabled Shuffle despite sufficient MP, including after Undo. Affordability and settled physics still gate casting; Undo never refunds Mana. The shared replay validator accepts repeated casts with a bounded 256-event abuse guard. Regression reproduces a 234-Mana wallet across four Shuffles, Undo, another Shuffle, and insufficient-funds rejection, plus a multi-spell verified win.
 
 Journey now has two warm-up boards. Level 3 introduces four colors and joined queue locks; mixed recipes start at level 5 and two shelf slots at level 9. All 30 layouts retain verified winning routes under survival-v7. Progression save data is unchanged. Defeat uses a separate dark theme, cracked, tipping flask and spill animation, fading embers and reduced-motion support; Restart receives initial focus.
+
+## Visible Sweep supply (2026-10-18)
+
+Sweep and Dispel preserve exact gem value as essence; deleting this supply would make later recipes impossible. The reservoir now sits between jar and shelf, inside the fluid overlay's bounds. Colored vial chips show saved charges, retaining in-flight charges until delivery. Each stored dose launches a visible wisp from its actual chip center to the flask mouth, independent of GPU dye visibility, and is cleaned up on completion, Undo and Restart. No score or recipe rules change.
+
+Checks: verify-essence.mjs covers an all-gems Sweep, exact dose conservation, per-dose reservoir countdown, source location, visible flight, mouth arrival and cleanup; verify-spell-rescue.mjs and verify-mastery.mjs cover spell continuation, scoring parity and wallet persistence. Browser QA: Sweep Mint 11, first bottle reduces reservoir to 9, second to 7; visible essence flight is present and console has no errors. Native Vercel build passes.
