@@ -11,8 +11,8 @@ class GemPhysics {
  constructor(){
   this.engine=Matter.Engine.create({enableSleeping:true,positionIterations:8,velocityIterations:6});this.engine.gravity.y=.78;this.bodies=new Map();this.impacts=[];this.accumulator=0;this.lastTime=0;this.drag=null;this.impactClock=0;
   // Stable IDs keep collision-pair order independent of previous levels/worlds.
-  const wall={isStatic:true,friction:.24,restitution:.12};this.floorParts=[];this.walls=[];
-  for(let i=0;i<GemPhysics.outline.length-1;i++){const a=GemPhysics.outline[i],b=GemPhysics.outline[i+1],dx=b[0]-a[0],dy=b[1]-a[1],len=Math.hypot(dx,dy);const part=Matter.Bodies.rectangle((a[0]+b[0])/2-dy/len*7,(a[1]+b[1])/2+dx/len*7,len+2,14,{...wall,id:i+1,angle:Math.atan2(dy,dx)});this.walls.push(part);if((a[1]+b[1])/2>=185)this.floorParts.push(part);}
+  const wall={isStatic:true,friction:0,restitution:.12};this.floorParts=[];this.walls=[];
+  for(let i=0;i<GemPhysics.outline.length-1;i++){const a=GemPhysics.outline[i],b=GemPhysics.outline[i+1],dx=b[0]-a[0],dy=b[1]-a[1],len=Math.hypot(dx,dy);const part=Matter.Bodies.rectangle((a[0]+b[0])/2-dy/len*7,(a[1]+b[1])/2+dx/len*7,len,14,{...wall,id:i+1,angle:Math.atan2(dy,dx)});this.walls.push(part);if((a[1]+b[1])/2>=210)this.floorParts.push(part);}
   this.floor=this.floorParts[Math.floor(this.floorParts.length/2)];Matter.Composite.add(this.engine.world,[...this.walls,Matter.Bodies.rectangle(180,16,230,24,{...wall,id:40})]);this.quietSteps=0;this.settled=false;
   Matter.Events.on(this.engine,'collisionStart',event=>{for(const pair of event.pairs){const a=pair.bodyA,b=pair.bodyB,speed=Math.hypot(a.velocity.x-b.velocity.x,a.velocity.y-b.velocity.y);if(speed<.8)continue;const p=pair.collision.supports[0]||a.position;this.impacts.push({x:p.x,y:p.y,strength:Math.min(3,speed),life:1,color:a.plugin.gem?.color??b.plugin.gem?.color??2});for(const body of [a,b])if(body.plugin.gem)body.plugin.gem.impact=Math.min(.07,speed*.008);}});
  }
@@ -28,14 +28,23 @@ class GemPhysics {
   columns.forEach((column,i)=>column.forEach(d=>{const body=this.makeBody(d,i);this.bodies.set(d.id,body);Matter.Composite.add(this.engine.world,body);}));this.sync();
  }
  sync(){const alpha=this.settled?1:Math.max(0,Math.min(1,this.accumulator/(1000/120)));for(const body of this.bodies.values()){const d=body.plugin.gem;d.x=body.position.x;d.y=body.position.y;d.angle=body.angle;d.renderX=(d.prevX??d.x)+(d.x-(d.prevX??d.x))*alpha;d.renderY=(d.prevY??d.y)+(d.y-(d.prevY??d.y))*alpha;d.renderAngle=(d.prevAngle??d.angle)+(d.angle-(d.prevAngle??d.angle))*alpha;d.vx=body.velocity.x;d.vy=body.velocity.y;d.angularVelocity=body.angularVelocity;d.sleeping=body.isSleeping;d.available=this.settled&&this.canCollect(body);}}
- canCollect(body){return !this.drag&&Math.abs(body.velocity.y)<.35&&body.speed<.55&&Math.abs(body.angularVelocity)<.04&&this.floorParts.some(part=>!!Matter.Collision.collides(body,part));}
+ canCollect(body){return !this.drag&&body.bounds.max.y>=234&&Math.abs(body.velocity.y)<.35&&body.speed<.55&&Math.abs(body.angularVelocity)<.04&&this.floorParts.some(part=>!!Matter.Collision.collides(body,part));}
  bottom(color){return [...this.bodies.values()].filter(b=>(color===undefined||b.plugin.gem.color===color)&&this.canCollect(b)).sort((a,b)=>a.position.x-b.position.x||a.plugin.gem.id-b.plugin.gem.id).map(b=>b.plugin.gem);}
  advance(){
   if(this.settled&&!this.drag)return;
   for(const b of this.bodies.values()){const d=b.plugin.gem;d.prevX=b.position.x;d.prevY=b.position.y;d.prevAngle=b.angle;}
+  // A shallow inward tilt helps angular gems clear seams on the curved side walls.
+  // It never grants collection: a gem still has to reach the low floor contacts.
+  for(const body of this.bodies.values())if(body.position.y>150&&body.position.y<224&&Math.abs(body.position.x-180)>80)Matter.Body.applyForce(body,body.position,{x:(180-body.position.x)*body.mass*.000002,y:0});
   Matter.Engine.update(this.engine,1000/120);
   const quiet=!this.drag&&[...this.bodies.values()].every(b=>b.isSleeping||(b.speed<.12&&Math.abs(b.angularVelocity)<.012));
   this.quietSteps=quiet?this.quietSteps+1:0;this.settled=this.quietSteps>=24;
+  if(this.settled&&this.bodies.size&&![...this.bodies.values()].some(b=>this.canCollect(b))){
+   // No low contact remains: let an angular bridge physically slide into the bowl.
+   // This changes motion, never the collection test or ingredient supply.
+   this.settled=false;this.quietSteps=0;
+   for(const b of this.bodies.values())if(Math.abs(b.position.x-180)>60){Matter.Sleeping.set(b,false);const direction=b.position.x<180?1:-1;Matter.Body.setVelocity(b,{x:direction*.65,y:.15});Matter.Body.setAngularVelocity(b,direction*.012);}
+  }
   if(this.settled)for(const b of this.bodies.values())Matter.Sleeping.set(b,true);
  }
  settle(maxSteps=720){for(let i=0;i<maxSteps&&!this.settled;i++)this.advance();this.sync();return this.settled;}

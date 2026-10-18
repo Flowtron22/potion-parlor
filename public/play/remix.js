@@ -9,7 +9,7 @@ globalThis.PotionRemix={
   for(let attempt=0;attempt<40;attempt++){
    const result=JSON.parse(JSON.stringify(board));this.shuffle(result.columns,rng);const initial=JSON.parse(JSON.stringify(result.columns));
    const world=new GemPhysics();world.reset(result.columns);world.settle(3600);
-   if(!world.settled||world.bottom().length<6||world.bottom().length>8)continue;
+   if(!world.settled||world.bottom().length<4||world.bottom().length>6)continue;
    const queue=JSON.parse(JSON.stringify(result.queue)),colors=new Map(),path=[];let valid=true;
    while(queue.some(t=>!t.cleared)){
     const available=queue.filter(t=>PotionRules.exposed(queue,t));if(!available.length){valid=false;break;}

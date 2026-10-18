@@ -6,13 +6,13 @@ globalThis.PotionMastery=(()=>{
   {name:'Apprentice',xp:400,wins:4,level:0,rune:'✧'},
   {name:'Herbalist',xp:900,wins:8,level:0,rune:'❧'},
   {name:'Potion Brewer',xp:1500,wins:12,level:0,rune:'⚗'},
-  {name:'Alchemist',xp:2600,wins:16,level:13,rune:'⚝'},
-  {name:'Rune Caster',xp:4000,wins:22,level:16,rune:'ᛟ'},
-  {name:'Mage',xp:6000,wins:30,level:20,rune:'✦'},
-  {name:'Archmage',xp:9000,wins:40,level:25,rune:'✴'},
-  {name:'Oracle',xp:13000,wins:55,level:30,rune:'☽'},
-  {name:'Arcane Sage',xp:18000,wins:75,level:30,rune:'✺'},
-  {name:'Immortal Alchemist',xp:26000,wins:100,level:30,rune:'∞'}
+  {name:'Alchemist',xp:2600,wins:16,level:0,rune:'⚝'},
+  {name:'Rune Caster',xp:4000,wins:22,level:0,rune:'ᛟ'},
+  {name:'Mage',xp:6000,wins:30,level:0,rune:'✦'},
+  {name:'Archmage',xp:9000,wins:40,level:0,rune:'✴'},
+  {name:'Oracle',xp:13000,wins:55,level:0,rune:'☽'},
+  {name:'Arcane Sage',xp:18000,wins:75,level:0,rune:'✺'},
+  {name:'Immortal Alchemist',xp:26000,wins:100,level:0,rune:'∞'}
  ];
  const integer=(n,max)=>Number.isFinite(n)?Math.max(0,Math.min(max,Math.floor(n))):0;
  function create(storage){
@@ -24,9 +24,9 @@ globalThis.PotionMastery=(()=>{
   function save(){try{if(!storage)throw Error('Storage unavailable');storage.setItem(KEY,JSON.stringify({version:2,records,mana,free}));persisted=true;}catch{persisted=false;}}
   function status(){
    const values=Object.values(records),xp=values.reduce((n,r)=>n+r.xp,0),level=Math.max(0,...values.map(r=>r.cleanLevel)),wins=values.filter(r=>r.won).length;
-   let index=0;for(let i=1;i<ranks.length;i++)if(xp>=ranks[i].xp&&wins>=ranks[i].wins&&level>=ranks[i].level)index=i;
+   let index=0;for(let i=1;i<ranks.length;i++)if(xp>=ranks[i].xp&&wins>=ranks[i].wins)index=i;
    const rank=ranks[index],next=ranks[index+1]||null;
-   const progress=next?Math.min(1,Math.max(0,(xp-rank.xp)/(next.xp-rank.xp)),Math.max(0,(wins-rank.wins)/(next.wins-rank.wins)),next.level?level/next.level:1):1;
+   const progress=next?Math.min(1,Math.max(0,(xp-rank.xp)/(next.xp-rank.xp)),Math.max(0,(wins-rank.wins)/(next.wins-rank.wins))):1;
    return {xp,level,wins,index,rank,next,progress,persisted,mana,free,income:20+index*4};
   }
   function record(run,won){
@@ -45,7 +45,8 @@ globalThis.PotionMastery=(()=>{
    return {earned,manaEarned,promoted,before,after:status(),rescued,firstWin:won&&!previous.won};
   }
   function spend(type){if(!Object.hasOwn(prices,type))return false;if(type==='dispel'&&free>0){free--;save();return true;}if(mana<prices[type])return false;mana-=prices[type];save();return true;}
-  return {status,award:run=>record(run,true),consolation:run=>record(run,false),spend};
+  function resetRank(){for(const r of Object.values(records)){r.xp=0;r.cleanLevel=0;r.won=false;}save();return status();}
+  return {status,resetRank,award:run=>record(run,true),consolation:run=>record(run,false),spend};
  }
  function message(won,title,attempt=0){
   const wins=[`Well brewed, ${title}.`,`A fine bit of magic, ${title}.`,`Beautiful brew, ${title}.`];

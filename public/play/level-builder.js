@@ -8,7 +8,7 @@ function generate(level,attempt=0){
   columns[col].push({id,color:Math.floor(rng()*colorCount),shape,radius,drawRadius:radius,aspect:.9+rng()*.2,seed:rng()*10,x:49+col*43.5,y:217-row*43,angle:(rng()-.5)*.2});}
  GemPhysics.arrange(columns.flat(),rng);const world=new window.GemPhysics();world.reset(columns);world.settle();
  const initial=JSON.parse(JSON.stringify(columns)),floorCount=world.bottom().length;
- if(floorCount<6||floorCount>8)return generate(level,attempt+1);
+ if(floorCount<4||floorCount>6)return generate(level,attempt+1);
  const solution=[];
  // Derive bottles from a real floor-contact removal sequence, then replay it.
  // The same selector and settling policy are used during play; upper gems cannot bypass them.

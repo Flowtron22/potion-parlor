@@ -12,11 +12,11 @@ let savedLevel=1;try{savedLevel=Math.max(1,Math.min(30,Number(localStorage.getIt
 const shuffle=(a,rng=Math.random)=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;};
 const levelCache=new Map();
 let levelWorker=null,loadId=0;
-function makeFreshBoard(board){return new Promise((resolve,reject)=>{const worker=new Worker('remix-worker.js?v=round11');const timer=setTimeout(()=>{worker.terminate();reject(Error('Shuffle took too long. Tap restart to retry.'));},15000);worker.onmessage=event=>{clearTimeout(timer);worker.terminate();event.data.error?reject(Error(event.data.error)):resolve(event.data.board);};worker.onerror=()=>{clearTimeout(timer);worker.terminate();reject(Error('Shuffle unavailable. Tap restart to retry.'));};worker.postMessage(board);});}
+function makeFreshBoard(board){return new Promise((resolve,reject)=>{const worker=new Worker('remix-worker.js?v=progress12');const timer=setTimeout(()=>{worker.terminate();reject(Error('Shuffle took too long. Tap restart to retry.'));},15000);worker.onmessage=event=>{clearTimeout(timer);worker.terminate();event.data.error?reject(Error(event.data.error)):resolve(event.data.board);};worker.onerror=()=>{clearTimeout(timer);worker.terminate();reject(Error('Shuffle unavailable. Tap restart to retry.'));};worker.postMessage(board);});}
 async function loadLevel(level,remixed=false,continuing=false){
  const id=++loadId;document.documentElement.classList.add('loading');document.querySelector('.app').setAttribute('aria-busy','true');$('restart').disabled=true;$('shake').disabled=true;
  try{
-  let data;if(levelCache.has(level))data=JSON.parse(levelCache.get(level));else{const response=await fetch('boards/'+level+'.json?v=8');if(!response.ok)throw Error('Board unavailable');data=await response.json();levelCache.set(level,JSON.stringify(data));if(levelCache.size>3)levelCache.delete(levelCache.keys().next().value);}
+  let data;if(levelCache.has(level))data=JSON.parse(levelCache.get(level));else{const response=await fetch('boards/'+level+'.json?v=9');if(!response.ok)throw Error('Board unavailable');data=await response.json();levelCache.set(level,JSON.stringify(data));if(levelCache.size>3)levelCache.delete(levelCache.keys().next().value);}
   if(remixed)data=await makeFreshBoard(data);if(id!==loadId)return;newGame(level,data,remixed,continuing);
  }catch(error){if(id!==loadId)return;$('rankMode').textContent='Tap ↻ to retry';$('restart').disabled=false;$('restart').onclick=()=>loadLevel(level,remixed,continuing);}
  finally{if(id===loadId){document.documentElement.classList.remove('loading');document.querySelector('.app').setAttribute('aria-busy','false');}}
@@ -217,3 +217,5 @@ function shuffleCurrent(){
 $('shuffle')?.addEventListener('click',shuffleCurrent);
 $('modalShuffle')?.addEventListener('click',shuffleCurrent);
 $('modalRestart')?.addEventListener('click',restartGame);
+
+document.addEventListener('potion:rank-reset',()=>{dailyMode=false;savedLevel=1;try{localStorage.setItem('potion-cascade-level','1');}catch{}loadLevel(1);});

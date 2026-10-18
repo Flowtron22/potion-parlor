@@ -38,3 +38,13 @@ vm.runInContext('let batch=effects;effects=[];batch.forEach(completePour);physic
 assert.equal(vm.runInContext('state.brewed',c),2);assert.equal(vm.runInContext('state.essence.length',c),0);assert.equal(c.reports.at(-1).won,true);assert.equal(c.reports.at(-1).run.rescued,true);
 const events=JSON.parse(vm.runInContext('JSON.stringify(runLog)',c));assert.equal(validateRun(c.verificationBoard,events).score,vm.runInContext('state.scoring.score',c),'Spell scoring must match the server');
 console.log('PASS: four-win Apprentice (including assisted wins), wallet/free spells, no XP spending, partial reward caps, replay protection, daily rollover, migration, cancellation, no undo refunds, affordable spells beyond two casts, essence conservation, completed spell-assisted board, undo remains practice, verified spell score parity.');
+
+// Spells must never become a permanent title gate, including for existing Rune Caster saves.
+const allHelp=M.create();for(let level=1;level<=30;level++)allHelp.award({...clear,level,rescued:true});
+for(let day=1;day<=80;day++)allHelp.award({...clear,level:30,rescued:true,daily:true,day:'2027-'+String(1+Math.floor((day-1)/28)).padStart(2,'0')+'-'+String(1+(day-1)%28).padStart(2,'0')});
+assert.equal(allHelp.status().rank.name,'Immortal Alchemist');
+const migratedRecords=Object.fromEntries(Array.from({length:30},(_,i)=>['journey:'+(i+1),{xp:250,won:true,cleanLevel:16,manaPaid:40}]));let resetSave=JSON.stringify({version:2,mana:234,free:5,records:migratedRecords});
+const resetStorage={getItem:()=>resetSave,setItem:(key,value)=>resetSave=value},migrated=M.create(resetStorage);assert.equal(migrated.status().rank.name,'Mage','Existing assisted wins unlock the qualified rank');assert.equal(migrated.status().mana,234);
+const reset=migrated.resetRank();assert.equal(reset.rank.name,'Squire');assert.equal(reset.xp,0);assert.equal(reset.wins,0);assert.equal(reset.mana,234);assert.equal(reset.free,5);
+const reloaded=M.create(resetStorage);assert.equal(reloaded.status().rank.name,'Squire');reloaded.award({...clear,level:1,rescued:true});assert.equal(reloaded.status().wins,1);assert.equal(reloaded.status().mana,234,'Reset keeps the paid-reward ledger so prior clear MP cannot be farmed');
+console.log('PASS: spell-only progression reaches every title; existing Rune Caster save upgrades without erasing Mana; confirmed reset persists and preserves wallet and paid-reward ledger.');

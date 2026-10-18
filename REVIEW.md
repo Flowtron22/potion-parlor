@@ -31,3 +31,9 @@ Checks: verify-essence.mjs covers an all-gems Sweep, exact dose conservation, pe
 Replaced the rectangular chamber with a true curved collision bowl, narrower mouth and round belly. Browser physics, deterministic server replay, seed generation and spell/restart placement share the curved world. Regenerated all 30 canonical boards under survival-v8 while preserving the two-board warm-up and later planning curve. Existing Mastery, wins and MP saves are unchanged. A curved-wall stack fixture replaces the old flat-floor test stack.
 
 Saved essence moves into the unused shelf columns, spanning two cells with three active flasks or three with two. Its source coordinates and delivery animation follow the moved reservoir. The reservoir does not add playable flask capacity. Verified 6–8 initial contacts, all 30 solutions and remixes, 840 contained removals without stranded ingredients, score parity, repeat spells and submission recovery. Browser QA confirms Sweep 10 Mint charges and a visible pour from the right-hand shelf.
+
+## Title access, reset and low-floor challenge (2026-10-19)
+
+Removed all unassisted level gates from title progression. Existing assisted wins and XP immediately qualify; Mana and free spells are unchanged. Added a confirmed Reset rank action in the title panel, preserving wallet/shared scores and the paid-reward ledger, and restarting Journey 1. Keyboard navigation now reaches all dialog controls. Regression covers spell-only progression to Immortal Alchemist, an existing Rune Caster save becoming Mage, reset persistence and no duplicate MP payout.
+
+Collection now requires the low arc and gem bottoms reaching y=234; high side contacts no longer pour. Wall friction and a shallow inward tilt clear polygon seams without granting eligibility. Warm-up ends after board 2: board 3 switches to two slots and occasional ordered recipes, then recipes and colors tighten further. Canonical boards are regenerated under survival-v9.

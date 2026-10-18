@@ -37,7 +37,7 @@ function routeFor(columns,level,random){
   const floor=world.bottom();if(!floor.length)throw Error('No physical floor');
   const counts=new Map();for(const g of floor)counts.set(g.color,(counts.get(g.color)||0)+1);
   const color=[...counts].sort((a,b)=>b[1]-a[1]||a[0]-b[0])[0][0],recipe=[];
-  const mixed=level>=5&&random()<(level<=8?.22:level<=12?.35:level<=22?.48:.7),capacity=level<=2?2:level<=6?3:2+Math.floor(random()*3);
+  const mixed=level>=3&&random()<(level<=4?.18:level<=8?.35:level<=12?.5:level<=22?.6:.75),capacity=level<=2?2:level<=6?3:2+Math.floor(random()*3);
   for(let i=0;i<capacity;i++){
    const bottom=world.bottom(),previous=recipe.at(-1)??color;
    const gem=mixed?(i===1?bottom.find(g=>g.color!==previous):bottom.find(g=>g.color===previous))||bottom[0]:bottom.find(g=>g.color===color);
@@ -54,21 +54,21 @@ export function buildCatalog(){
   const seed=clone(seeds[(level-1)%seeds.length]),colorCount=level<=2?3:level<=4?4:level<=8?5:6;
   for(const g of seed.columns.flat()){g.color%=colorCount;delete g.material;if(level>=23&&g.id%4===1)g.material='heavy';}
   const gems=seed.columns.flat().sort((a,b)=>a.id-b.id).slice(0,28);seed.columns=Array.from({length:7},(_,i)=>gems.filter(g=>g.id%7===i));let packed=false;
-  for(let attempt=0;attempt<40;attempt++){GemPhysics.arrange(gems,rng(level*1007+attempt*97));const world=new GemPhysics();world.reset(seed.columns);world.settle(3600);if(world.settled&&world.bottom().length>=6&&world.bottom().length<=8){packed=true;break;}}
+  for(let attempt=0;attempt<40;attempt++){GemPhysics.arrange(gems,rng(level*1007+attempt*97));const world=new GemPhysics();world.reset(seed.columns);world.settle(3600);if(world.settled&&world.bottom().length>=4&&world.bottom().length<=6){packed=true;break;}}
   if(!packed)throw Error('Could not pack round cauldron at level '+level);
-  const route=routeFor(seed.columns,level,rng(61973+level*97)),slots=level<=8?3:2;
-  const base={...seed,level,version:8,ruleset:'survival-v8',colorCount,slots,shelf:Array(slots).fill(null),lanes:[],brewed:0,moves:0,over:false,bottleCount:route.length,total:seed.columns.flat().length,solution:route.map(b=>b.id)};
+  const route=routeFor(seed.columns,level,rng(61973+level*97)),slots=level<=2?3:2;
+  const base={...seed,level,version:9,ruleset:'survival-v9',colorCount,slots,shelf:Array(slots).fill(null),lanes:[],brewed:0,moves:0,over:false,bottleCount:route.length,total:seed.columns.flat().length,solution:route.map(b=>b.id)};
   // Select a fair difficulty band, rather than always selecting the hardest queue.
-  const target=level<=2?.88:level<=4?.55:level<=8?.38:level<=12?.28:level<=22?.2:.1;
+  const target=level<=2?.90:level<=4?.35:level<=8?.20:level<=12?.12:.08;
   let best=null,distance=Infinity;
   for(let attempt=0;attempt<16;attempt++){
    const board={...base,queue:queueFor(route,rng(level*1877+attempt*97),level)};let wins=0;
-   for(let probe=0;probe<12;probe++)if(simulate(board,rng(731+level*157+probe*71)))wins++;
-   const diff=Math.abs(wins/12-target);if(diff<distance){best=board;distance=diff;best.randomProbeWins=wins;}
-   if(diff<=1/12)break;
+   const probes=level<=8?24:12;for(let probe=0;probe<probes;probe++)if(simulate(board,rng(731+level*157+probe*71)))wins++;
+   const diff=Math.abs(wins/probes-target);if(diff<distance){best=board;distance=diff;best.randomProbeWins=wins;best.randomProbeTotal=probes;}
+   if(diff<=1/probes)break;
   }
   if(!simulate(best,rng(1),true))throw Error('No winning route: '+level);
-  boards.push(best);console.log(`Level ${level} · ${colorCount} colors · ${slots} slots · ${best.queue.length} flasks · random ${best.randomProbeWins}/12`);
+  boards.push(best);console.log(`Level ${level} · ${colorCount} colors · ${slots} slots · ${best.queue.length} flasks · random ${best.randomProbeWins}/${best.randomProbeTotal}`);
  }
  fs.writeFileSync('server/levels.json',JSON.stringify(boards));return boards;
 }

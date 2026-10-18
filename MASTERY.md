@@ -2,19 +2,19 @@
 
 Titles use permanent Mastery XP. Mana Points (MP) are a separate, spendable wallet; spending never reduces XP. Everything is saved locally under the migrated `potion-mastery-v1` storage key (schema 2). Existing XP and completed-board records are preserved. There is no cross-device title or wallet sync.
 
-| Title | XP | Distinct board wins | Unassisted milestone | Base Mana / first clear |
-| --- | ---: | ---: | --- | ---: |
-| Squire | 0 | 0 | — | 20 |
-| Apprentice | 400 | 4 | — | 24 |
-| Herbalist | 900 | 8 | — | 28 |
-| Potion Brewer | 1,500 | 12 | — | 32 |
-| Alchemist | 2,600 | 16 | Level 13 | 36 |
-| Rune Caster | 4,000 | 22 | Level 16 | 40 |
-| Mage | 6,000 | 30 | Level 20 | 44 |
-| Archmage | 9,000 | 40 | Level 25 | 48 |
-| Oracle | 13,000 | 55 | Level 30 | 52 |
-| Arcane Sage | 18,000 | 75 | Level 30 | 56 |
-| Immortal Alchemist | 26,000 | 100 | Level 30 | 60 |
+| Title | XP | Distinct board wins | Base Mana / first clear |
+| --- | ---: | ---: | ---: |
+| Squire | 0 | 0 | 20 |
+| Apprentice | 400 | 4 | 24 |
+| Herbalist | 900 | 8 | 28 |
+| Potion Brewer | 1,500 | 12 | 32 |
+| Alchemist | 2,600 | 16 | 36 |
+| Rune Caster | 4,000 | 22 | 40 |
+| Mage | 6,000 | 30 | 44 |
+| Archmage | 9,000 | 40 | 48 |
+| Oracle | 13,000 | 55 | 52 |
+| Arcane Sage | 18,000 | 75 | 56 |
+| Immortal Alchemist | 26,000 | 100 | 60 |
 
 Every new clear earns at least 100 XP, including assisted clears. Thus four new wins always unlock Apprentice; high-scoring first wins cannot bypass the four-win requirement. Clear reward: `100 + 5 × level`, plus `10 × medal + 5 × best combo` if unassisted; Daily adds 20 XP. First clear Mana: tier base + `2 × floor(level/5)` + 5 for Daily. Promotions grant `25 + 10 × new tier index` Mana and a free Dispel.
 
@@ -35,3 +35,7 @@ The title list changes without resetting existing XP, win records, Mana, or free
 
 
 Defeat submissions update one score row per run and never lower an existing saved total. Saving no longer consumes a ticket: a saved run can be rescued and saved again, then advance through the normal verified-win checkpoint. Advancing consumes the parent ticket. Late network replies are ignored after the board or event log changes.
+
+All titles now depend only on XP and board wins. Spell-assisted wins count at every tier, including Mage through Immortal Alchemist; legacy saved wins and XP qualify immediately. Clean clears retain their optional XP bonus but never gate a title.
+
+The title panel includes Reset rank with an inline confirmation and Cancel. Confirming resets title, XP and wins to Squire and restarts Journey 1; it keeps Mana, free Dispel charges and shared leaderboard scores. The paid-reward ledger is retained to prevent repeated board MP payouts after resetting. No reset occurs automatically on update.

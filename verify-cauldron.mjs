@@ -5,7 +5,7 @@ const boards=JSON.parse(fs.readFileSync('server/levels.json','utf8'));
 let curvedContacts=0,removed=0;
 for(const board of boards){
  const world=new GemPhysics();world.reset(structuredClone(board.columns));world.settle(3600);
- assert(world.bottom().length>=6&&world.bottom().length<=8,'Opening floor access stays at 6–8');
+ assert(world.bottom().length>=4&&world.bottom().length<=6,'Opening floor access stays at 4–6');
  while(world.bodies.size){
   assert(world.settled,'Round bowl must settle after each removal');
   // Check actual collision vertices, allowing 3 pixels at segmented wall joints inside the thick iron rim.
@@ -14,9 +14,9 @@ for(const board of boards){
    assert((dx*(p.y-a[1])-dy*(p.x-a[0]))/Math.hypot(dx,dy)<3,'Gem escaped the round cauldron');
   }
   const floor=world.bottom();assert(floor.length,'No ingredient may get stranded on a curved wall');
-  curvedContacts+=floor.filter(g=>Math.abs(g.x-180)>75&&g.y+g.drawRadius*g.aspect<243).length;
+  for(const gem of floor)assert(world.bodies.get(gem.id).bounds.max.y>=234,'High side gems must wait');curvedContacts+=floor.filter(g=>Math.abs(g.x-180)>60).length;
   const gem=floor[0];world.remove(gem.id);world.settle(3600);removed++;
  }
 }
 assert(curvedContacts>0,'Eligible gems must contact the curved lower wall, not a hidden rectangular floor');
-console.log(`PASS: all ${boards.length} round bowls retain 6–8 initial contacts; ${removed} removals settle inside curved walls with no stranded gems.`);
+console.log(`PASS: all ${boards.length} round bowls retain 4–6 initial contacts; ${removed} removals settle inside curved walls with no stranded gems.`);
