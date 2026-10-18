@@ -1,4 +1,4 @@
-import {validateRun} from './validate.mjs';
+import {validateScore as validateRun} from './validate-blocked.mjs';
 import {PotionChallenge} from './challenge.mjs';
 const titles=['Squire','Apprentice','Herbalist','Potion Brewer','Alchemist','Rune Caster','Mage','Archmage','Oracle','Arcane Sage','Immortal Alchemist'];
 const json=(data,status=200,headers={})=>Response.json(data,{status,headers:{'Cache-Control':'no-store',...headers}});

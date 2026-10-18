@@ -2,7 +2,7 @@
 const COLORS=[{name:'Rose',hex:'#f17b91',symbol:'♡'},{name:'Amber',hex:'#efb74e',symbol:'☀'},{name:'Mint',hex:'#7dcfa4',symbol:'✿'},{name:'Azure',hex:'#69c4e5',symbol:'☾'},{name:'Lilac',hex:'#b89ae6',symbol:'✧'},{name:'Peach',hex:'#ef9f72',symbol:'◇'}];
 const $=id=>document.getElementById(id),canvas=$('game'),ctx=canvas.getContext('2d');
 let dailyMode=false,runDay="",remixedRun=false,spellMode=null,spellUses=0,helpUsed=false,spellWasBlocked=false,spellUIKey='';
-let runLog=[],ranked=true,runTicket=null,runTicketReady=Promise.resolve(null),runPoints=0,runSerial=0,rankConnection='Connecting';let runStage=1,finalRun=null;
+let runLog=[],ranked=true,runTicket=null,runTicketReady=Promise.resolve(null),runPoints=0,runSerial=0,rankConnection='Connecting';let runStage=1,finalRun=null,runStages=[];
 let state,history=[],effects=[],busy=false,lastTick=0,nextDrawAt=0,time=0,audio,sound=true,modalMode='win',bottleSerial=0,physics=null;
 try{sound=localStorage.getItem('potion-sound')!=='off';}catch{}
 let brewQueue=[],brewTimer=null;
@@ -61,6 +61,7 @@ function render(){
 function snapshot(){return JSON.stringify({logLength:runLog.length,state,effects:effects.map(e=>({...e,start:0})),physics:{settled:physics?.settled||false,quietSteps:physics?.quietSteps||0}});}
 function resetPhysics(){if(state.columns.flat().some(d=>!Number.isFinite(d.drawRadius)||!Number.isFinite(d.y)))layoutGems(state.columns);if(window.GemPhysics){physics??=new window.GemPhysics();physics.reset(state.columns);}for(const m of bottleMotion){m.angle=0;m.velocity=0;m.lift=0;}for(let i=0;i<slotSVGs.length;i++)if(slotSVGs[i]){slotSVGs[i].style.transform='';slotNodes[i].style.setProperty('--slosh','0deg');}}
 function newGame(level=1,prepared,remixed=false,continuing=false){
+ if(continuing)runStages.push({level:state.level,events:structuredClone(runLog)});else runStages=[];
  finalRun=null;runStage=continuing?runStage+1:1;if(!continuing)globalThis.PotionTitles?.startRun?.();
  if(brewTimer)clearTimeout(brewTimer);brewTimer=null;brewQueue=[];
  const mode=dailyMode,previous=continuing?{ready:runTicketReady,events:structuredClone(runLog),eligible:ranked}:null;
@@ -194,7 +195,7 @@ async function submitFinalScore(automatic=false){
  const packet=finalRun;if(!packet||!ranked||packet.saving)return;const btn=$('postScore'),current=()=>finalRun===packet&&packet.serial===runSerial;
  let name=String($('playerName').value||'').normalize('NFKC').trim();if(!/^[\p{L}\p{N} _.-]{2,18}$/u.test(name)){if(automatic)name='Brewer';else{$('submitStatus').textContent='Use 2–18 letters or numbers for your name.';return;}}
  if(automatic)$('playerName').value=name;packet.saving=true;btn.disabled=true;$('submitStatus').textContent='Saving…';
- try{const ticket=await packet.ready;if(!ticket)throw Error('Reconnect to save this run.');const result=await window.PotionOnline.submit(ticket,name,packet.events,packet.title);if(!current())return;$('submitStatus').textContent='Saved · #'+result.rank;btn.textContent='Update name';}
+ try{const ticket=await packet.ready;const result=await window.PotionOnline.submit(ticket,name,packet.events,packet.title,packet.recovery);if(!current())return;$('submitStatus').textContent='Saved · #'+result.rank;btn.textContent='Update name';}
  catch(error){if(current()){$('submitStatus').textContent=error.message;btn.textContent='Retry save';}}
  finally{packet.saving=false;if(current())btn.disabled=false;}
 }
@@ -233,7 +234,7 @@ function showBlocked(){
 function endRun(){
  if(finalRun||!state.over||effects.length||modalMode!=='rescue')return false;
  const reached=globalThis.PotionTitles?.status?.(),title=reached?.rank.name||'Squire';runLog.push({type:'end'});
- finalRun={serial:runSerial,title,events:structuredClone(runLog),ready:runTicketReady,saving:false};modalMode='lose';history=[];spellMode=null;
+ finalRun={serial:runSerial,title,events:structuredClone(runLog),ready:runTicketReady,saving:false,recovery:{id:Date.now().toString(36)+'-'+Math.random().toString(36).slice(2),stages:structuredClone(runStages),level:state.level,daily:dailyMode}};modalMode='lose';history=[];spellMode=null;
  globalThis.PotionTitles?.endRun?.();savedLevel=1;$('modalTitle').textContent='Run over';$('resultGreeting').textContent='Final rank: '+title;$('resultMastery').textContent='';$('resultMastery').classList.add('hidden');
  $('submitScore').classList.toggle('hidden',!ranked);$('postScore').textContent='Save score';$('postScore').disabled=false;$('submitStatus').textContent='';
  for(const id of ['rescueSpells','modalShuffle','modalEndRun','modalAction'])$(id).classList.add('hidden');$('modalRestart').classList.remove('hidden');$('modalRestart').onclick=()=>loadLevel(dailyMode?PotionChallenge.level():1);$('modalRestart').focus();renderSpells();

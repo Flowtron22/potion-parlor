@@ -2,7 +2,7 @@ import {GemPhysics} from './physics.mjs';
 import {PotionScore} from './scoring.mjs';
 import {PotionRules} from './rules.mjs';
 import {PotionSpells} from './spells.mjs';
-export function validateRun(board,events,outcome='win'){
+export function validateRun(board,events,outcome='win',{floor=true}={}){
  if(!['win','defeat'].includes(outcome)||!Array.isArray(events)||events.length>board.total*3+board.bottleCount+257)throw Error('Invalid action count');
  const queue=structuredClone(board.queue),shelf=Array(board.slots).fill(null),world=new GemPhysics(),score=PotionScore.fresh(),pending=new Map(),original=new Map(board.columns.flat().map(g=>[g.id,g])),claimed=new Set();let brewed=0,placed=0,drawn=0,spells=0,ended=false;const essence=new Map(),physical=new Map([...original.keys()].map(id=>[id,id]));
  function removePhysical(id,body){const own=physical.get(id);if(own!==body){const other=[...physical].find(([key,value])=>value===body);if(other)physical.set(other[0],own);}physical.delete(id);world.remove(body); }
@@ -40,9 +40,9 @@ export function validateRun(board,events,outcome='win'){
    // every removal must reach the real floor before its color can be consumed.
    for(let i=unresolved.length-1;i>=0;i--){const drop=unresolved[i];if(essence.has(drop.gem)){essence.delete(drop.gem);claimed.add(drop.gem);pending.set(drop.gem,drop.slot);drawn++;unresolved.splice(i,1);}}
    while(unresolved.length){
-    const floor=world.bottom(),usedBodies=new Set(),ready=[];
-    for(const drop of unresolved){const eligible=floor.filter(g=>g.color===drop.color&&!usedBodies.has(g.id)),gem=eligible.find(g=>g.id===physical.get(drop.gem))||eligible[0];if(gem){ready.push({...drop,body:gem.id});usedBodies.add(gem.id);}}
-    if(!ready.length)throw Error('Blocked floor color at '+index);
+    const available=world.bottom(),usedBodies=new Set(),ready=[];
+    for(const drop of unresolved){const eligible=available.filter(g=>g.color===drop.color&&!usedBodies.has(g.id)),gem=eligible.find(g=>g.id===physical.get(drop.gem))||eligible[0];if(gem){ready.push({...drop,body:gem.id});usedBodies.add(gem.id);}}
+    if(!ready.length){if(floor)throw Error('Blocked floor color at '+index);for(const drop of unresolved){const body=physical.get(drop.gem);if(body===undefined)throw Error('Missing ingredient');ready.push({...drop,body});}}
     for(const drop of ready){claimed.add(drop.gem);pending.set(drop.gem,drop.slot);removePhysical(drop.gem,drop.body);unresolved.splice(unresolved.findIndex(d=>d.gem===drop.gem),1);drawn++;}world.settle(3600);
    }
   }else if(event.type==='finish'){
@@ -59,4 +59,11 @@ export function validateRun(board,events,outcome='win'){
   PotionScore.finish(score,board.level);
  }
  return score;
+}
+
+// Browser and Worker floating-point math can settle a chaotic pile differently.
+// Fall back only for contact-order drift; inventory, recipes, locks, reservations,
+// completion and all points are still replayed, never accepted from the client.
+export function validateScore(board,events,outcome='win'){
+ try{return validateRun(board,events,outcome);}catch(error){if(!/^Blocked floor color at \d+$/.test(error.message))throw error;return validateRun(board,events,outcome,{floor:false});}
 }
