@@ -1,8 +1,8 @@
 import {GemPhysics} from './physics.mjs';
 import {PotionScore} from './scoring.mjs';
 import {PotionRules} from './rules.mjs';
-export function validateRun(board,events){
- if(!Array.isArray(events)||events.length>board.total*3+board.bottleCount||events.length<board.bottleCount)throw Error('Invalid action count');
+export function validateRun(board,events,outcome='win'){
+ if(!['win','defeat'].includes(outcome)||!Array.isArray(events)||events.length>board.total*3+board.bottleCount)throw Error('Invalid action count');
  const queue=structuredClone(board.queue),shelf=Array(board.slots).fill(null),world=new GemPhysics(),score=PotionScore.fresh(),pending=new Map(),original=new Map(board.columns.flat().map(g=>[g.id,g])),claimed=new Set();let brewed=0,placed=0,drawn=0;
  world.reset(structuredClone(board.columns));world.settle(3600);
  for(const [index,event] of events.entries()){
@@ -35,6 +35,13 @@ export function validateRun(board,events){
    if(bottle.fill===bottle.capacity){queue.find(t=>t.id===bottle.id).cleared=true;PotionScore.clear(score,bottle.capacity,bottle.color,board.level,bottle.combo);shelf[slot]=null;brewed++;}
   }else throw Error('Invalid action');
  }
- if(world.bodies.size||pending.size||drawn!==board.total||placed!==board.bottleCount||brewed!==board.bottleCount)throw Error('Incomplete run');
- PotionScore.finish(score,board.level);return score;
+ if(outcome==='defeat'){
+  if(pending.size||brewed===board.bottleCount||PotionRules.plan(shelf,world.bottom()).length||
+   (shelf.includes(null)&&queue.some(t=>PotionRules.exposed(queue,t))))throw Error('Run is not defeated');
+  PotionScore.breakChain(score);
+ }else{
+  if(world.bodies.size||pending.size||drawn!==board.total||placed!==board.bottleCount||brewed!==board.bottleCount)throw Error('Incomplete run');
+  PotionScore.finish(score,board.level);
+ }
+ return score;
 }
