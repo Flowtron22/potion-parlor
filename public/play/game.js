@@ -3,7 +3,9 @@ const COLORS=[{name:'Rose',hex:'#f17b91',symbol:'♡'},{name:'Amber',hex:'#efb74
 const $=id=>document.getElementById(id),canvas=$('game'),ctx=canvas.getContext('2d');
 let dailyMode=false,runDay="",remixedRun=false,spellMode=null,spellUses=0,helpUsed=false,spellWasBlocked=false,spellUIKey='';
 let runLog=[],ranked=true,runTicket=null,runTicketReady=Promise.resolve(null),runPoints=0,runSerial=0,rankConnection='Connecting';
-let state,history=[],effects=[],busy=false,lastTick=0,nextDrawAt=0,time=0,audio,sound=false,modalMode='win',bottleSerial=0,physics=null;
+let state,history=[],effects=[],busy=false,lastTick=0,nextDrawAt=0,time=0,audio,sound=true,modalMode='win',bottleSerial=0,physics=null;
+try{sound=localStorage.getItem('potion-sound')!=='off';}catch{}
+let brewQueue=[],brewTimer=null;
 const bottleMotion=Array.from({length:5},()=>({angle:0,velocity:0,lift:0}));let motionTime=0;
 let slotNodes=[],slotSVGs=[],laneNodes=[],viewDirty=true;const rackMeta=Array(5).fill(null),queueMeta=Array(4).fill(null);
 let savedLevel=1;try{savedLevel=Math.max(1,Math.min(30,Number(localStorage.getItem('potion-cascade-level'))||1));}catch{}
@@ -14,7 +16,7 @@ function makeFreshBoard(board){return new Promise((resolve,reject)=>{const worke
 async function loadLevel(level,remixed=false,continuing=false){
  const id=++loadId;document.documentElement.classList.add('loading');document.querySelector('.app').setAttribute('aria-busy','true');$('restart').disabled=true;$('shake').disabled=true;
  try{
-  let data;if(levelCache.has(level))data=JSON.parse(levelCache.get(level));else{const response=await fetch('boards/'+level+'.json');if(!response.ok)throw Error('Board unavailable');data=await response.json();levelCache.set(level,JSON.stringify(data));if(levelCache.size>3)levelCache.delete(levelCache.keys().next().value);}
+  let data;if(levelCache.has(level))data=JSON.parse(levelCache.get(level));else{const response=await fetch('boards/'+level+'.json?v=6');if(!response.ok)throw Error('Board unavailable');data=await response.json();levelCache.set(level,JSON.stringify(data));if(levelCache.size>3)levelCache.delete(levelCache.keys().next().value);}
   if(remixed)data=await makeFreshBoard(data);if(id!==loadId)return;newGame(level,data,remixed,continuing);
  }catch(error){if(id!==loadId)return;$('rankMode').textContent='Tap ↻ to retry';$('restart').disabled=false;$('restart').onclick=()=>loadLevel(level,remixed,continuing);}
  finally{if(id===loadId){document.documentElement.classList.remove('loading');document.querySelector('.app').setAttribute('aria-busy','false');}}
@@ -59,6 +61,7 @@ function render(){
 function snapshot(){return JSON.stringify({logLength:runLog.length,state,effects:effects.map(e=>({...e,start:0})),physics:{settled:physics?.settled||false,quietSteps:physics?.quietSteps||0}});}
 function resetPhysics(){if(state.columns.flat().some(d=>!Number.isFinite(d.drawRadius)||!Number.isFinite(d.y)))layoutGems(state.columns);if(window.GemPhysics){physics??=new window.GemPhysics();physics.reset(state.columns);}for(const m of bottleMotion){m.angle=0;m.velocity=0;m.lift=0;}for(let i=0;i<slotSVGs.length;i++)if(slotSVGs[i]){slotSVGs[i].style.transform='';slotNodes[i].style.setProperty('--slosh','0deg');}}
 function newGame(level=1,prepared,remixed=false,continuing=false){
+ if(brewTimer)clearTimeout(brewTimer);brewTimer=null;brewQueue=[];
  const mode=dailyMode,previous=continuing?{ready:runTicketReady,events:structuredClone(runLog),eligible:ranked}:null;
  runPoints=continuing?runPoints+(state?.scoring?.score||0):0;
  $('scoreFlash')?.getAnimations?.().forEach(a=>a.cancel());if($('scoreFlash'))$('scoreFlash').textContent='';
@@ -116,7 +119,7 @@ function tick(now){
  const drops=globalThis.PotionSpells?PotionSpells.plan(state,physics.bottom(),effects):PotionRules.plan(state.shelf,physics.bottom(),effects);
  if(drops.length){
   const concurrent=drops.length;runLog.push({type:'draw',drops});PotionScore.burst(state.scoring,concurrent);
-  if(state.scoring.combo>1){flashScore(brewName(state.scoring.combo)+' ×'+state.scoring.combo);tone(520+state.scoring.combo*90,.12);}for(const drop of drops)state.shelf[drop.slot].combo=Math.max(state.shelf[drop.slot].combo||1,state.scoring.combo);
+  if(state.scoring.combo>1){flashScore(brewName(state.scoring.combo)+' ×'+state.scoring.combo,state.scoring.combo);tone(520+state.scoring.combo*90,.12);}for(const drop of drops)state.shelf[drop.slot].combo=Math.max(state.shelf[drop.slot].combo||1,state.scoring.combo);
   for(const drop of drops){const stored=(state.essence||[]).find(g=>g.id===drop.gem),gem=stored||physics.bodies.get(drop.gem).plugin.gem;
    if(stored){state.essence.splice(state.essence.indexOf(stored),1);}else{const col=state.columns.find(c=>c.some(g=>g.id===gem.id));col.splice(col.findIndex(g=>g.id===gem.id),1);physics.remove(gem.id);}
    effects.push({gemId:gem.id,color:gem.color,radius:gem.drawRadius,shape:gem.shape,aspect:gem.aspect,angle:gem.angle||0,stored:!!stored,from:{x:stored?180:gem.x,y:stored?242:gem.y},to:{x:36+drop.slot*72,y:298},start:now,duration:1100,slot:drop.slot});tone(460+gem.color*70,.06);
@@ -130,7 +133,7 @@ function tick(now){
 function completePour(e){
  const b=state.shelf[e.slot];if(!b)return;runLog.push({type:'finish',gem:e.gemId});PotionScore.gem(state.scoring);b.fill++;
  bottleMotion[e.slot].velocity+=(e.from.x<180?1:-1)*.55;
- if(b.fill===b.capacity){const before=state.scoring.score;state.queue.find(t=>t.id===b.id).cleared=true;state.shelf[e.slot]=null;state.brewed++;PotionScore.clear(state.scoring,b.capacity,b.color,state.level,b.combo);flashScore((b.combo>1?brewName(b.combo)+' ×'+b.combo:'BREWED')+'  +'+(state.scoring.score-before));tone(880,.14);}
+ if(b.fill===b.capacity){const before=state.scoring.score;state.queue.find(t=>t.id===b.id).cleared=true;state.shelf[e.slot]=null;state.brewed++;PotionScore.clear(state.scoring,b.capacity,b.color,state.level,b.combo);flashScore((b.combo>1?brewName(b.combo)+' ×'+b.combo:'BREWED')+'  +'+(state.scoring.score-before),b.combo);tone(880,.14);}
  busy=effects.length>0;render();
 }
 function tone(freq,duration){if(!sound)return;try{audio??=new (window.AudioContext||window.webkitAudioContext)();if(audio.state==='suspended')audio.resume();const o=audio.createOscillator(),g=audio.createGain();o.frequency.setValueAtTime(freq,audio.currentTime);g.gain.setValueAtTime(.035,audio.currentTime);g.gain.exponentialRampToValueAtTime(.001,audio.currentTime+duration);o.connect(g);g.connect(audio.destination);o.start();o.stop(audio.currentTime+duration);}catch{}}
@@ -157,12 +160,32 @@ function draw(now){ const frameStart=window.frameMeter?.begin(now);
 }
 function showEnd(won){let resultMedal=0;if(won&&state.scoring){PotionScore.finish(state.scoring,state.level);const medal=PotionScore.medal(state.scoring,!ranked,Math.max(...state.queue.map(t=>t.capacity)));resultMedal=medal;if($('resultMedal'))$('resultMedal').textContent='✦'.repeat(medal);try{const key='potion-medal-'+state.level;localStorage.setItem(key,String(Math.max(medal,Number(localStorage.getItem(key))||0)));}catch{}}else if($('resultMedal'))$('resultMedal').textContent='';render();if($('resultScore')){$('resultScore').textContent=(runPoints+state.scoring.score).toLocaleString();$('submitScore').classList.toggle('hidden',won||!ranked);$('submitStatus').textContent='';$('postScore').disabled=false;$('postScore').textContent='Submit score';}globalThis.PotionTitles?.finish(won,{level:state.level,medal:resultMedal,combo:state.scoring.best,brewed:state.brewed,daily:dailyMode,day:runDay,rescued:!ranked});renderSpells();modalMode=won?'win':'lose';$('modalTitle').textContent=won?'✧':'';$('modalTitle').setAttribute('aria-label',won?'Level completed':'Shelf blocked');$('modalRestart').classList.toggle('hidden',won);$('modalShuffle').classList.toggle('hidden',won);$('modalAction').textContent=won?'→':'Undo';$('modalAction').setAttribute('aria-label',won?'Next level':'Undo last bottle');$('modal').classList.remove('hidden');$('modalAction').focus();}
 function undo(){if(spellMode||!history.length)return;window.potionFluid?.reset();const saved=JSON.parse(history.pop());state=saved.state;runLog.length=saved.logLength||0;ranked=false;state.over=false;effects=saved.effects.map(e=>({...e,start:performance.now()}));busy=!!effects.length;lastTick=performance.now();resetPhysics();if(physics&&saved.physics){physics.settled=saved.physics.settled;physics.quietSteps=saved.physics.quietSteps;physics.sync();}$('modal').classList.add('hidden');render();}
-$('queues').addEventListener('click',e=>{const b=e.target.closest('button[data-tile]');if(b&&!b.disabled)choose(Number(b.dataset.tile));});$('restart').onclick=restartGame;$('undo').onclick=undo;$('sound').onclick=()=>{sound=!sound;$('sound').textContent=sound?'♫':'♪';$('sound').setAttribute('aria-label',sound?'Mute sound':'Enable sound');tone(660,.1);};$('modalAction').onclick=()=>{if(modalMode==='win')loadLevel(state.level%30+1,false,true);else undo();};
+$('queues').addEventListener('click',e=>{const b=e.target.closest('button[data-tile]');if(b&&!b.disabled)choose(Number(b.dataset.tile));});$('restart').onclick=restartGame;$('undo').onclick=undo;$('sound').onclick=()=>{sound=!sound;try{localStorage.setItem('potion-sound',sound?'on':'off');}catch{}$('sound').setAttribute('aria-pressed',String(sound));$('sound').textContent=sound?'♫':'♪';$('sound').setAttribute('aria-label',sound?'Mute sound':'Enable sound');tone(660,.1);};$('sound').textContent=sound?'♫':'♪';$('sound').setAttribute('aria-label',sound?'Mute sound':'Enable sound');$('sound').setAttribute('aria-pressed',String(sound));$('modalAction').onclick=()=>{if(modalMode==='win')loadLevel(state.level%30+1,false,true);else undo();};
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='z'){e.preventDefault();undo();}});
 // Challenge mode has no gem-drag control: buried colors must fall naturally.
 $('shake').onclick=()=>{if(!physics||state.over)return;history.push(snapshot());ranked=false;if(state.scoring)PotionScore.breakChain(state.scoring);render();physics.nudge();$('undo').disabled=false;document.querySelector('.game').animate([{transform:'rotate(0)'},{transform:'rotate(-.45deg)'},{transform:'rotate(.4deg)'},{transform:'rotate(0)'}],{duration:360,easing:'ease-out'});tone(220,.08);};
 
-function flashScore(text){const el=$('scoreFlash');if(!el)return;el.textContent=text;el.getAnimations?.().forEach(a=>a.cancel());el.animate?.([{opacity:0,transform:'translateY(8px)'},{opacity:1,offset:.15},{opacity:1,offset:.7},{opacity:0,transform:'translateY(-12px)'}],{duration:2600,fill:'forwards'});}
+function brewPoof(combo){
+ if(!sound)return;try{
+  audio??=new (window.AudioContext||window.webkitAudioContext)();if(audio.state==='suspended')audio.resume();const now=audio.currentTime;
+  for(let i=0;i<3;i++){const o=audio.createOscillator(),gain=audio.createGain(),start=now+i*.065;o.type='sine';o.frequency.setValueAtTime((420+Math.min(combo,8)*42)*[1,1.25,1.5][i],start);o.frequency.exponentialRampToValueAtTime((520+combo*42)*[1,1.25,1.5][i],start+.1);gain.gain.setValueAtTime(0,start);gain.gain.linearRampToValueAtTime(.022,start+.012);gain.gain.exponentialRampToValueAtTime(.001,start+.28);o.connect(gain);gain.connect(audio.destination);o.start(start);o.stop(start+.3);}
+  const pop=audio.createOscillator(),gain=audio.createGain();pop.frequency.setValueAtTime(260,now);pop.frequency.exponentialRampToValueAtTime(70,now+.12);gain.gain.setValueAtTime(.045,now);gain.gain.exponentialRampToValueAtTime(.001,now+.15);pop.connect(gain);gain.connect(audio.destination);pop.start();pop.stop(now+.16);
+ }catch{}
+}
+function flashScore(text,combo=0){
+ if(typeof setTimeout!=='function'){showBrewFlash(text,combo);return;}
+ if(brewQueue.length>=3)brewQueue.shift();brewQueue.push({text,combo});if(!brewTimer)nextBrewFlash();
+}
+function nextBrewFlash(){
+ const message=brewQueue.shift();if(!message){brewTimer=null;return;}showBrewFlash(message.text,message.combo);brewTimer=setTimeout(nextBrewFlash,550);
+}
+function showBrewFlash(text,combo=0){
+ const el=$('scoreFlash');if(!el)return;el.getAnimations?.().forEach(a=>a.cancel());el.textContent=text;
+ if(el.insertAdjacentHTML){el.textContent='';const word=document.createElement('span');word.className='brew-word';word.textContent=text;el.append(word);el.insertAdjacentHTML('afterbegin','<span class="brew-cloud" aria-hidden="true"><i></i><i></i><i></i></span>');el.insertAdjacentHTML('beforeend','<span class="brew-sparks" aria-hidden="true">'+Array.from({length:8},(_,i)=>'<i style="--spark:'+i+'">'+(i%2?'✧':'✦')+'</i>').join('')+'</span>');}
+ el.classList?.add('brew-announcement');el.setAttribute?.('data-potency',String(Math.min(8,combo||1)));
+ el.animate?.([{opacity:0,transform:'translateY(14px) scale(.65)',filter:'blur(7px)'},{opacity:1,transform:'translateY(-3px) scale(1.08)',filter:'blur(0)',offset:.12},{opacity:1,transform:'translateY(0) scale(1)',offset:.23},{opacity:1,transform:'translateY(-3px) scale(1.02)',offset:.72},{opacity:0,transform:'translateY(-19px) scale(1.07)',filter:'blur(3px)'}],{duration:2200,fill:'forwards',easing:'ease-out'});
+ if(combo>1)brewPoof(combo);
+}
 if($('leaderboard')?.addEventListener&&window.PotionOnline){$('leaderboard').onclick=()=>window.PotionOnline.open(state?.level||1,dailyMode);$('postScore').onclick=async()=>{const btn=$('postScore');btn.disabled=true;$('submitStatus').textContent='Submitting…';try{runTicket=await runTicketReady;if(!state.over||modalMode!=='lose'||!ranked)throw Error('Only a defeated ranked run can be submitted.');if(!runTicket)throw Error('Reconnect and replay to rank this run.');const result=await window.PotionOnline.submit(runTicket,$('playerName').value,runLog,globalThis.PotionTitles?.status().rank.name||'Squire');$('submitStatus').textContent='Saved · #'+result.rank;btn.textContent='Submitted';}catch(e){$('submitStatus').textContent=e.message;btn.disabled=false;}};}
 
 document.addEventListener('potion-level',event=>{dailyMode=!!event.detail.daily;loadLevel(event.detail.level||event.detail);});

@@ -4,10 +4,15 @@ globalThis.PotionMastery=(()=>{
  const ranks=[
   {name:'Squire',xp:0,wins:0,level:0,rune:'◇'},
   {name:'Apprentice',xp:400,wins:4,level:0,rune:'✧'},
-  {name:'Alchemist',xp:1400,wins:10,level:0,rune:'⚗'},
-  {name:'Wizard',xp:3600,wins:20,level:11,rune:'✦'},
-  {name:'Archwizard',xp:7500,wins:35,level:16,rune:'✴'},
-  {name:'Grand Archwizard',xp:12000,wins:55,level:25,rune:'♜'}
+  {name:'Herbalist',xp:900,wins:8,level:0,rune:'❧'},
+  {name:'Potion Brewer',xp:1500,wins:12,level:0,rune:'⚗'},
+  {name:'Alchemist',xp:2600,wins:16,level:13,rune:'⚝'},
+  {name:'Rune Caster',xp:4000,wins:22,level:16,rune:'ᛟ'},
+  {name:'Mage',xp:6000,wins:30,level:20,rune:'✦'},
+  {name:'Archmage',xp:9000,wins:40,level:25,rune:'✴'},
+  {name:'Oracle',xp:13000,wins:55,level:30,rune:'☽'},
+  {name:'Arcane Sage',xp:18000,wins:75,level:30,rune:'✺'},
+  {name:'Immortal Alchemist',xp:26000,wins:100,level:30,rune:'∞'}
  ];
  const integer=(n,max)=>Number.isFinite(n)?Math.max(0,Math.min(max,Math.floor(n))):0;
  function create(storage){

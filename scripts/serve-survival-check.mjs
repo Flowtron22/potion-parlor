@@ -5,7 +5,7 @@ import {createLeaderboardAPI} from '../server/leaderboard-api.mjs';
 import {testDatabase,losingEvents} from '../verify-survival.mjs';
 import {boards} from '../verify-blocked.mjs';
 const {DB}=testDatabase(),api=createLeaderboardAPI(DB,boards);
-for(const [name,title] of [['Juniper','Grand Archwizard'],['Moss','Alchemist']]){
+for(const [name,title] of [['Juniper','Arcane Sage'],['Moss','Alchemist']]){
  const r=await api.start(new Request('http://127.0.0.1:4191/api/runs',{method:'POST',body:JSON.stringify({level:1})})),ticket=await r.json();
  await api.submit(new Request('http://127.0.0.1:4191/api/scores',{method:'POST',headers:{Cookie:r.headers.get('Set-Cookie').split(';')[0]},body:JSON.stringify({ticket:ticket.id,name,title,events:losingEvents(boards[0])})}));
 }

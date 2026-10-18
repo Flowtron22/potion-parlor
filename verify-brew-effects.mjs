@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import vm from 'node:vm';
+import {clientHarness} from './verify-blocked.mjs';
+const c=clientHarness();assert.equal(vm.runInContext('sound',c),true,'SFX defaults on');
+c.timers=new Map();let next=1;c.setTimeout=(fn,delay)=>{assert.equal(delay,550);const id=next++;c.timers.set(id,fn);return id;};c.clearTimeout=id=>c.timers.delete(id);
+vm.runInContext("flashScore('DOUBLE BUBBLE',2);flashScore('TRIPLE TROUBLE',3);flashScore('BREWSTORM',4)",c);
+assert.equal(vm.runInContext("document.getElementById('scoreFlash').textContent",c),'DOUBLE BUBBLE');assert.equal(vm.runInContext('brewQueue.length',c),2);const fn=c.timers.values().next().value;c.timers.clear();fn();assert.equal(vm.runInContext("document.getElementById('scoreFlash').textContent",c),'TRIPLE TROUBLE');
+vm.runInContext("flashScore('a');flashScore('b');flashScore('c');flashScore('d')",c);assert.equal(vm.runInContext('brewQueue.length',c),3,'Burst queue is bounded');
+vm.runInContext('newGame(1,initial)',c);assert.equal(vm.runInContext('brewQueue.length',c),0);assert.equal(c.timers.size,0,'Changing board cancels old messages');
+const oscillators=[];const param=()=>({setValueAtTime(){},linearRampToValueAtTime(){},exponentialRampToValueAtTime(){}});c.window.AudioContext=class{constructor(){this.currentTime=0;this.state='running';this.destination={};}createOscillator(){const o={frequency:param(),connect(){},start(){this.started=true;},stop(){this.stopped=true;}};oscillators.push(o);return o;}createGain(){return{gain:param(),connect(){}};}};
+vm.runInContext('brewPoof(4)',c);assert.equal(oscillators.length,4);assert(oscillators.every(o=>o.started&&o.stopped),'Every chime and pop has a bounded lifetime');vm.runInContext("document.getElementById('sound').onclick();brewPoof(4)",c);assert.equal(vm.runInContext('sound',c),false);assert.equal(oscillators.length,4,'Muted combo creates no audio nodes');
+console.log('PASS: default-on SFX, bounded poof succession, board-change cleanup, scheduled chimes/pop and mute.');
