@@ -17,7 +17,7 @@ for(const original of boards){
 const original=structuredClone(boards[0]);const shuffled=c.PotionRemix.shuffle(structuredClone(original.columns),rng(412));
 assert.deepEqual(shuffled.flat().map(g=>[g.id,g.color,g.shape,g.drawRadius]),original.columns.flat().map(g=>[g.id,g.color,g.shape,g.drawRadius]));
 assert.notEqual(JSON.stringify(shuffled),JSON.stringify(original.columns));
-vm.runInContext(fs.readFileSync('public/play/mastery.js','utf8'),c);const profile=c.PotionMastery.create();assert(profile.spend('shuffle'));assert.equal(profile.status().mana,35);assert.equal(profile.status().free,1);
+vm.runInContext(fs.readFileSync('public/play/mastery.js','utf8'),c);vm.runInContext(fs.readFileSync('public/play/spells.js','utf8'),c);const profile=c.PotionMastery.create();assert(profile.spend('shuffle'));assert.equal(profile.status().mana,35);assert.equal(profile.status().free,1);
 vm.runInContext('physics.settle(3600);',c);c.PotionTitles={status:()=>profile.status(),spend:type=>profile.spend(type)};const before=vm.runInContext('state.columns.flat().length',c);
-assert.equal(vm.runInContext('shuffleCurrent()',c),true);assert.equal(profile.status().mana,20);assert.equal(vm.runInContext('state.columns.flat().length',c),before);assert.equal(vm.runInContext('ranked',c),false);
-console.log('PASS: shuffle keeps gem identities, costs 15 Mana, preserves bottles and progress, resumes physics and excludes assisted scores.');
+assert.equal(vm.runInContext('shuffleCurrent()',c),true);assert.equal(profile.status().mana,20);assert.equal(vm.runInContext('state.columns.flat().length',c),before);assert.equal(vm.runInContext('ranked',c),true);
+console.log('PASS: shuffle keeps gem identities, costs 15 Mana, preserves bottles and progress and resumes physics and keeps canonical spell runs ranked.');

@@ -3,13 +3,13 @@ import {PotionScore} from './scoring.mjs';
 import {PotionRules} from './rules.mjs';
 import {PotionSpells} from './spells.mjs';
 export function validateRun(board,events,outcome='win'){
- if(!['win','defeat'].includes(outcome)||!Array.isArray(events)||events.length>board.total*3+board.bottleCount+2)throw Error('Invalid action count');
+ if(!['win','defeat'].includes(outcome)||!Array.isArray(events)||events.length>board.total*3+board.bottleCount+256)throw Error('Invalid action count');
  const queue=structuredClone(board.queue),shelf=Array(board.slots).fill(null),world=new GemPhysics(),score=PotionScore.fresh(),pending=new Map(),original=new Map(board.columns.flat().map(g=>[g.id,g])),claimed=new Set();let brewed=0,placed=0,drawn=0,spells=0;const essence=new Map(),physical=new Map([...original.keys()].map(id=>[id,id]));
  function removePhysical(id,body){const own=physical.get(id);if(own!==body){const other=[...physical].find(([key,value])=>value===body);if(other)physical.set(other[0],own);}physical.delete(id);world.remove(body); }
  world.reset(structuredClone(board.columns));world.settle(3600);
  for(const [index,event] of events.entries()){
   if(event.type==='spell'){
-   if(pending.size||++spells>2||!['dispel','sweep','shuffle'].includes(event.spell))throw Error('Invalid spell');
+   if(pending.size||++spells>256||!['dispel','sweep','shuffle'].includes(event.spell))throw Error('Invalid spell');
    if(event.spell==='shuffle'){
     if(!Number.isInteger(event.seed)||event.seed<0||event.seed>4294967295||!physical.size)throw Error('Invalid shuffle seed');
     const gems=[...physical.keys()].map(id=>({...original.get(id)}));PotionSpells.shuffle([gems],event.seed);world.reset([gems]);world.settle(3600);for(const g of gems)physical.set(g.id,g.id);

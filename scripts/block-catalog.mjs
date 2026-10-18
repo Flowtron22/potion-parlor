@@ -16,12 +16,12 @@ export function simulate(board,random,solution=false){
  return clears===queue.length&&world.bodies.size===0;
 }
 function queueFor(route,random,level){
- const positions=[],roots=level<=8?[1,3,5]:[1,5];
+ const positions=[],roots=level<=2?[1,3,5]:[1,5];
  for(let row=0;positions.length<route.length;row++){
   const xs=row===0?roots:row%2?[0,2,4,6]:[1,3,5];
   for(const x of xs){if(positions.length===route.length)break;
    const previous=positions.filter(t=>t.row===row-1);let parents=previous.filter(t=>Math.abs(t.x-x)<1.3);
-   if(row&&(!parents.length||level<=8))parents=[previous.sort((a,b)=>Math.abs(a.x-x)-Math.abs(b.x-x)||a.x-b.x)[0]];
+   if(row&&(!parents.length||level<=2))parents=[previous.sort((a,b)=>Math.abs(a.x-x)-Math.abs(b.x-x)||a.x-b.x)[0]];
    positions.push({pos:positions.length,x,row,blockers:parents.map(t=>t.pos)});
   }
  }
@@ -37,7 +37,7 @@ function routeFor(columns,level,random){
   const floor=world.bottom();if(!floor.length)throw Error('No physical floor');
   const counts=new Map();for(const g of floor)counts.set(g.color,(counts.get(g.color)||0)+1);
   const color=[...counts].sort((a,b)=>b[1]-a[1]||a[0]-b[0])[0][0],recipe=[];
-  const mixed=level>=13&&random()<(level<=16?.28:level<=22?.48:.7),capacity=level<=4?2:level<=12?3:2+Math.floor(random()*3);
+  const mixed=level>=5&&random()<(level<=8?.22:level<=12?.35:level<=22?.48:.7),capacity=level<=2?2:level<=6?3:2+Math.floor(random()*3);
   for(let i=0;i<capacity;i++){
    const bottom=world.bottom(),previous=recipe.at(-1)??color;
    const gem=mixed?(i===1?bottom.find(g=>g.color!==previous):bottom.find(g=>g.color===previous))||bottom[0]:bottom.find(g=>g.color===color);
@@ -51,12 +51,12 @@ function routeFor(columns,level,random){
 export function buildCatalog(){
  const seeds=JSON.parse(fs.readFileSync('server/physical-seeds.json','utf8')).filter(b=>b.colorCount===6),boards=[];
  for(let level=1;level<=30;level++){
-  const seed=clone(seeds[(level-1)%seeds.length]),colorCount=level<=4?3:level<=8?4:level<=12?5:6;
+  const seed=clone(seeds[(level-1)%seeds.length]),colorCount=level<=2?3:level<=4?4:level<=8?5:6;
   for(const g of seed.columns.flat()){g.color%=colorCount;delete g.material;if(level>=23&&g.id%4===1)g.material='heavy';}
-  const route=routeFor(seed.columns,level,rng(61973+level*97)),slots=level<=16?3:2;
-  const base={...seed,level,version:6,ruleset:'survival-v6',colorCount,slots,shelf:Array(slots).fill(null),lanes:[],brewed:0,moves:0,over:false,bottleCount:route.length,total:seed.columns.flat().length,solution:route.map(b=>b.id)};
+  const route=routeFor(seed.columns,level,rng(61973+level*97)),slots=level<=8?3:2;
+  const base={...seed,level,version:7,ruleset:'survival-v7',colorCount,slots,shelf:Array(slots).fill(null),lanes:[],brewed:0,moves:0,over:false,bottleCount:route.length,total:seed.columns.flat().length,solution:route.map(b=>b.id)};
   // Select a fair difficulty band, rather than always selecting the hardest queue.
-  const target=level<=4?.88:level<=8?.72:level<=12?.55:level<=16?.32:level<=22?.2:.1;
+  const target=level<=2?.88:level<=4?.55:level<=8?.38:level<=12?.28:level<=22?.2:.1;
   let best=null,distance=Infinity;
   for(let attempt=0;attempt<16;attempt++){
    const board={...base,queue:queueFor(route,rng(level*1877+attempt*97),level)};let wins=0;

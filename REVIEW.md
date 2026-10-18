@@ -2,7 +2,7 @@
 
 | Finding | Change | Verification |
 | --- | --- | --- |
-| Casting a spell permanently hid score submission and prevented subsequent verified level checkpoints. | Dispel, Sweep and seeded Shuffle remain eligible. Server replay verifies spell targets, a maximum of two spells per board, conserved essence, and score calculation. | `verify-spell-rescue.mjs`: defeat → skip saving → spell → defeat → submit; rescued wins can carry verified points onward. |
+| Casting a spell permanently hid score submission and prevented subsequent verified level checkpoints. | Dispel, Sweep and seeded Shuffle remain eligible. Server replay verifies spell targets, repeat casting within a bounded replay limit, conserved essence, and score calculation. | `verify-spell-rescue.mjs`: defeat → skip saving → spell → defeat → submit; rescued wins can carry verified points onward. |
 | Saving at an earlier defeat consumed the ticket, so rescuing an already-saved run broke later submissions and continuation. | Defeat saves update one score row per run, preserve its best total, and leave the ticket resumable. Only advancing consumes the parent ticket. | Both save-before-rescue and skip-save cases pass; repeat saves produce one row; consumed parent tickets reject updates. |
 | An old submission response could update a newer board's modal or overwrite its ticket. | Capture the ticket locally and ignore results if the board or event log changed. | `verify-submit-race.mjs`. |
 | Gem picking used 2D physics ordering, which can disagree with the foreground of overlapping 3D gems. | Single-gem targeting now raycasts the visible gem meshes. Sweep also offers explicit color/count buttons. | Browser tap on a visible Rose gem removed Rose; Sweep Mint removed all 11 Mint meshes. |
@@ -13,3 +13,9 @@
 All 30 canonical winning solutions still pass server validation. The link crawl passed 34 linked local page/style/script/worker/module assets, all 30 board paths, the share image, and both web fonts. Mastery/economy, combo cleanup, and Vercel proxy regressions also pass. Production builds pass.
 
 Undo, jar shake and remixed restarts retain their existing practice eligibility rules. Mastery XP and Mana remain device-local. No user saves or leaderboard records were deleted.
+
+## Repeat spells and shorter opening (2026-10-18)
+
+Fixed the hidden two-spell cap that disabled Shuffle despite sufficient MP, including after Undo. Affordability and settled physics still gate casting; Undo never refunds Mana. The shared replay validator accepts repeated casts with a bounded 256-event abuse guard. Regression reproduces a 234-Mana wallet across four Shuffles, Undo, another Shuffle, and insufficient-funds rejection, plus a multi-spell verified win.
+
+Journey now has two warm-up boards. Level 3 introduces four colors and joined queue locks; mixed recipes start at level 5 and two shelf slots at level 9. All 30 layouts retain verified winning routes under survival-v7. Progression save data is unchanged. Defeat uses a separate dark theme, cracked, tipping flask and spill animation, fading embers and reduced-motion support; Restart receives initial focus.

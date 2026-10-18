@@ -12,7 +12,7 @@ assert.equal((await post('scores',{ticket,name:'Local QA',events},cookie)).statu
 const invalidLevel=await post('runs',{level:0},cookie);assert.equal(invalidLevel.status,400,await invalidLevel.clone().text());
 const publicRows=await(await fetch(base+'/api/leaderboard?level=1')).json();assert(publicRows.rows.some(row=>row.name==='Local QA'&&row.score===result.score));
 console.log('PASS: local D1 score submission, independent visitor ranking, replay protection, forged-event rejection, origin checks and level bounds.');
-const dailyStart=await post('runs',{level:1,daily:true});assert.equal(dailyStart.status,200);const dailyTicket=await dailyStart.json(),dailyCookie=dailyStart.headers.get('set-cookie').split(';')[0];assert(/^survival-v6-daily-\d{4}-\d{2}-\d{2}$/.test(dailyTicket.ruleset));
+const dailyStart=await post('runs',{level:1,daily:true});assert.equal(dailyStart.status,200);const dailyTicket=await dailyStart.json(),dailyCookie=dailyStart.headers.get('set-cookie').split(';')[0];assert(/^survival-v7-daily-\d{4}-\d{2}-\d{2}$/.test(dailyTicket.ruleset));
 const dailySave=await post('scores',{ticket:dailyTicket.id,name:'Daily QA',events:losingEvents(boards[dailyTicket.level-1])},dailyCookie);assert.equal(dailySave.status,200,await dailySave.clone().text());
 const dailyRows=await(await fetch(base+'/api/leaderboard?daily=1')).json();assert(dailyRows.rows.some(r=>r.name==='Daily QA'));
 const journeyRows=await(await fetch(base+'/api/leaderboard?level='+dailyTicket.level)).json();assert(!journeyRows.rows.some(r=>r.name==='Daily QA'));
